@@ -253,12 +253,16 @@ before stay in use. The extension never stops the session because of a configura
 | `mise run typecheck` | Examines the types with `tsc`. |
 | `mise run demo` | Plays a text through the pitch code and the backend. |
 | `mise run audition` | Plays the same text through every preset. |
+| `mise run lab` | Compares presets and materials while a text stream plays. |
 
 The demo command accepts seven arguments: the text, the voice, the backend, the mapping, the preset, the material, and the touch. Each argument after the text is optional.
 
 ```sh
 mise run demo -- "the quick brown fox" text ffplay fold gamelan glass normal
 ```
+
+The sound lab uses the text voice. Press left or right to select a preset. Press up or down to
+select a material. Press Space to pause the stream, and press `q` to exit.
 
 Compare materials with the same phrase, mapping, and touch:
 

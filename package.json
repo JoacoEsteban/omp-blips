@@ -12,6 +12,9 @@
     "demo": "bun run scripts/demo.ts"
   },
   "dependencies": {
+    "@flyingrobots/bijou": "^7.2.0",
+    "@flyingrobots/bijou-node": "^7.2.0",
+    "@flyingrobots/bijou-tui": "^7.2.0",
     "ts-pattern": "^5.9.0",
     "zod": "^4.6.5"
   },

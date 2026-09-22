@@ -13,6 +13,10 @@ run = "bun run scripts/demo.ts"
 description = "Play the same phrase through every preset"
 run = "bun run scripts/audition.ts"
 
+[tasks.lab]
+description = "Compare presets and materials against a live text stream"
+run = "bun run scripts/lab.ts"
+
 [tasks.link]
 description = "Symlink this repo into the omp user extensions directory"
 run = """

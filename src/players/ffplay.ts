@@ -17,33 +17,38 @@ const LEAD_FRAMES = Math.round((LEAD_MS * SAMPLE_RATE) / 1000)
 const MAX_BLOCK_FRAMES = LEAD_FRAMES + Math.round((TICK_MS * SAMPLE_RATE) / 1000)
 
 const FFPLAY_ARGS = [
-  "-hide_banner",
-  "-loglevel",
-  "quiet",
-  "-nodisp",
-  "-autoexit",
-  "-fflags",
-  "nobuffer",
-  "-flags",
-  "low_delay",
-  "-probesize",
-  "32",
-  "-analyzeduration",
-  "0",
-  "-f",
-  "s16le",
-  "-ar",
-  String(SAMPLE_RATE),
-  "-ch_layout",
-  "mono",
-  "-i",
-  "pipe:0",
+ "-hide_banner",
+ "-loglevel",
+ "quiet",
+ "-nodisp",
+ "-autoexit",
+ "-fflags",
+ "nobuffer",
+ "-flags",
+ "low_delay",
+ "-probesize",
+ "32",
+ "-analyzeduration",
+ "0",
+ "-f",
+ "s16le",
+ "-ar",
+ String(SAMPLE_RATE),
+ "-ch_layout",
+ "mono",
+ "-i",
+ "pipe:0",
 ]
 
 interface ActiveVoice {
-  readonly samples: Float32Array
-  readonly gain: number
-  offset: number
+ readonly samples: Float32Array
+ readonly gain: number
+ offset: number
+}
+
+export interface FfplayPlayerOptions {
+ /** Silence before shutdown. Use `Infinity` to keep the process for the caller's lifetime. */
+ readonly idleMs?: number
 }
 
 /**
@@ -52,99 +57,99 @@ interface ActiveVoice {
  * of waiting for a process spawn, and overlapping tones are summed into one
  * buffer rather than racing separate processes.
  */
-export const createFfplayPlayer = (): Player => {
-  const active: ActiveVoice[] = []
-  let child: ChildProcess | undefined
-  let ticker: NodeJS.Timeout | undefined
-  let startedAt = 0
-  let cursor = 0
-  let lastVoiceAt = 0
+export const createFfplayPlayer = ({ idleMs = IDLE_MS }: FfplayPlayerOptions = {}): Player => {
+ const active: ActiveVoice[] = []
+ let child: ChildProcess | undefined
+ let ticker: NodeJS.Timeout | undefined
+ let startedAt = 0
+ let cursor = 0
+ let lastVoiceAt = 0
 
-  const stop = (): void => {
-    if (ticker !== undefined) clearInterval(ticker)
-    ticker = undefined
-    active.length = 0
-    child?.stdin?.end()
-    child?.kill("SIGTERM")
-    child = undefined
+ const stop = (): void => {
+  if (ticker !== undefined) clearInterval(ticker)
+  ticker = undefined
+  active.length = 0
+  child?.stdin?.end()
+  child?.kill("SIGTERM")
+  child = undefined
+ }
+
+ /** Advance every voice by `frames` samples, retiring the ones that ran out. */
+ const advance = (frames: number): void => {
+  for (let i = active.length - 1; i >= 0; i -= 1) {
+   const v = active[i]
+   if (v === undefined) continue
+   v.offset += frames
+   if (v.offset >= v.samples.length) active.splice(i, 1)
+  }
+ }
+
+ /** Mix `frames` samples from the active voices into little-endian PCM. */
+ const mix = (frames: number): Buffer => {
+  const block = Buffer.alloc(frames * 2)
+
+  for (let i = 0; i < frames; i += 1) {
+   let sum = 0
+   for (const v of active) {
+    const sample = v.samples[v.offset + i]
+    if (sample !== undefined) sum += sample * v.gain
+   }
+   block.writeInt16LE(toInt16(sum), i * 2)
   }
 
-  /** Advance every voice by `frames` samples, retiring the ones that ran out. */
-  const advance = (frames: number): void => {
-    for (let i = active.length - 1; i >= 0; i -= 1) {
-      const v = active[i]
-      if (v === undefined) continue
-      v.offset += frames
-      if (v.offset >= v.samples.length) active.splice(i, 1)
-    }
+  advance(frames)
+  return block
+ }
+
+ const tick = (): void => {
+  const now = performance.now()
+  if (active.length === 0 && now - lastVoiceAt > idleMs) {
+   stop()
+   return
   }
 
-  /** Mix `frames` samples from the active voices into little-endian PCM. */
-  const mix = (frames: number): Buffer => {
-    const block = Buffer.alloc(frames * 2)
+  const target = Math.floor(((now - startedAt) * SAMPLE_RATE) / 1000) + LEAD_FRAMES
+  const frames = Math.floor(target - cursor)
+  if (frames <= 0) return
+  cursor += frames
 
-    for (let i = 0; i < frames; i += 1) {
-      let sum = 0
-      for (const v of active) {
-        const sample = v.samples[v.offset + i]
-        if (sample !== undefined) sum += sample * v.gain
-      }
-      block.writeInt16LE(toInt16(sum), i * 2)
-    }
+  // The pipe drops nothing, so a stalled event loop would otherwise push every
+  // later blip back by the stall and never recover. Skip the starved span
+  // instead: the voices age as if it had played, so audio stays in sync with
+  // the text at the cost of a gap.
+  const starved = frames - MAX_BLOCK_FRAMES
+  if (starved > 0) advance(starved)
 
-    advance(frames)
-    return block
-  }
+  child?.stdin?.write(mix(Math.min(frames, MAX_BLOCK_FRAMES)))
+ }
 
-  const tick = (): void => {
-    const now = performance.now()
-    if (active.length === 0 && now - lastVoiceAt > IDLE_MS) {
-      stop()
-      return
-    }
+ const start = (): void => {
+  child = spawn("ffplay", FFPLAY_ARGS, { stdio: ["pipe", "ignore", "ignore"] })
+  child.on("error", stop)
+  child.on("exit", () => {
+   child = undefined
+   stop()
+  })
+  child.stdin?.on("error", () => { })
 
-    const target = Math.floor(((now - startedAt) * SAMPLE_RATE) / 1000) + LEAD_FRAMES
-    const frames = Math.floor(target - cursor)
-    if (frames <= 0) return
-    cursor += frames
+  startedAt = performance.now()
+  cursor = 0
+  ticker = setInterval(() => {
+   try {
+    tick()
+   } catch {
+    stop()
+   }
+  }, TICK_MS)
+  ticker.unref?.()
+ }
 
-    // The pipe drops nothing, so a stalled event loop would otherwise push every
-    // later blip back by the stall and never recover. Skip the starved span
-    // instead: the voices age as if it had played, so audio stays in sync with
-    // the text at the cost of a gap.
-    const starved = frames - MAX_BLOCK_FRAMES
-    if (starved > 0) advance(starved)
+ const play = (tone: Tone): void => {
+  if (child === undefined) start()
+  lastVoiceAt = performance.now()
+  if (active.length >= MAX_VOICES) return
+  active.push({ samples: voice(tone), gain: tone.volume, offset: 0 })
+ }
 
-    child?.stdin?.write(mix(Math.min(frames, MAX_BLOCK_FRAMES)))
-  }
-
-  const start = (): void => {
-    child = spawn("ffplay", FFPLAY_ARGS, { stdio: ["pipe", "ignore", "ignore"] })
-    child.on("error", stop)
-    child.on("exit", () => {
-      child = undefined
-      stop()
-    })
-    child.stdin?.on("error", () => {})
-
-    startedAt = performance.now()
-    cursor = 0
-    ticker = setInterval(() => {
-      try {
-        tick()
-      } catch {
-        stop()
-      }
-    }, TICK_MS)
-    ticker.unref?.()
-  }
-
-  const play = (tone: Tone): void => {
-    if (child === undefined) start()
-    lastVoiceAt = performance.now()
-    if (active.length >= MAX_VOICES) return
-    active.push({ samples: voice(tone), gain: tone.volume, offset: 0 })
-  }
-
-  return { play, dispose: stop }
+ return { play, dispose: stop }
 }
