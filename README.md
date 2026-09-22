@@ -18,13 +18,33 @@ with the pitch derived from the character itself.
 
 ## Voices
 
-| Stream | Register | Scale | Character |
-|---|---|---|---|
-| `text` | 220 Hz, 3 octaves | major pentatonic | the melody you follow |
-| `thinking` | 147 Hz, 2 octaves | minor pentatonic | a darker murmur below the prose |
-| `tool` | 523 Hz, 2 octaves | major pentatonic | short bright ticks, sparser (dense JSON) |
+| Stream | Register | Scale | Mapping | Character |
+|---|---|---|---|---|
+| `text` | 220 Hz, 3 octaves | major pentatonic | `wrap` | the melody you follow |
+| `thinking` | 147 Hz, 2 octaves | minor pentatonic | `fold` | a darker murmur below the prose |
+| `tool` | 523 Hz, 2 octaves | major pentatonic | `wrap` | short bright ticks, sparser (dense JSON) |
 
 Per-voice `enabled`, `charsPerBlip`, `toneMs` and `volume` live in `src/config.ts`.
+
+## Mappings
+
+A mapping decides how a character's alphabet index lands on the scale slots a voice has
+(`scale.length * octaves`). Presets live in `src/mapping.ts` and are selected per voice by name;
+adding one is a function plus an entry in `mappings`.
+
+- **`wrap`** — modulo. Pitch is monotonic in the alphabet, but the wrap point is a cliff: with 15
+  slots, `o` sits at the top and `p` drops two octaves. English puts common bigrams (`on`, `or`,
+  `no`) right across that seam, so the line leaps. Machine-like, and the default for prose.
+- **`fold`** — zigzag: ascend to the top slot, then descend, then ascend. Alphabetically adjacent
+  letters are always adjacent degrees, so the melody moves in steps with no seam. Smoother and more
+  song-like; the default for reasoning.
+
+Compare them by ear:
+
+```sh
+mise run demo -- "no one opposes open protocols" text ffplay wrap
+mise run demo -- "no one opposes open protocols" text ffplay fold
+```
 
 ## Backends
 
@@ -54,13 +74,13 @@ Restart `omp`. `/blips` toggles everything; `/blips on|off` forces it; `/blips t
 
 ```sh
 mise run typecheck
-mise run demo -- "the quick brown fox" text ffplay   # phrase, voice, backend
+mise run demo -- "the quick brown fox" text ffplay fold   # phrase, voice, backend, mapping
 ```
 
 ## Tuning
 
 Global knobs in `src/config.ts`: `backend`, `minIntervalMs`. Per-voice knobs under `voices`:
-`enabled`, `charsPerBlip`, `toneMs`, `volume`, `baseFrequency`, `scale`, `octaves`.
+`enabled`, `charsPerBlip`, `toneMs`, `volume`, `baseFrequency`, `scale`, `octaves`, `mapping`.
 
 ## Platform
 
