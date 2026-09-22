@@ -1,102 +1,109 @@
 import type { ExtensionAPI, MessageUpdateEvent } from "@oh-my-pi/pi-coding-agent"
 import { match, P } from "ts-pattern"
-import { defaultConfig, type StreamKind } from "./config.ts"
+import { defaultConfig, type BlipConfig, type StreamKind } from "./config.ts"
 import { pitchFromCharacter } from "./pitch.ts"
-import { createPlayer } from "./player.ts"
+import { createPlayer, type Player } from "./player.ts"
+import { loadSettings, settingsPaths } from "./settings.ts"
 
 interface Chunk {
-  readonly kind: StreamKind
-  readonly delta: string
+	readonly kind: StreamKind
+	readonly delta: string
 }
 
+const KINDS = ["text", "thinking", "tool"] as const
+
 /** Prose, reasoning, and tool arguments all stream as deltas; each gets its own voice. */
-const chunkOf = (
-  event: MessageUpdateEvent["assistantMessageEvent"],
-): Chunk | undefined =>
-  match(event)
-    .with({ type: "text_delta", delta: P.select(P.string) }, (delta) => ({
-      kind: "text" as const,
-      delta,
-    }))
-    .with({ type: "thinking_delta", delta: P.select(P.string) }, (delta) => ({
-      kind: "thinking" as const,
-      delta,
-    }))
-    .with({ type: "toolcall_delta", delta: P.select(P.string) }, (delta) => ({
-      kind: "tool" as const,
-      delta,
-    }))
-    .otherwise(() => undefined)
+const chunkOf = (event: MessageUpdateEvent["assistantMessageEvent"]): Chunk | undefined =>
+	match(event)
+		.with({ type: "text_delta", delta: P.select(P.string) }, (delta) => ({
+			kind: "text" as const,
+			delta,
+		}))
+		.with({ type: "thinking_delta", delta: P.select(P.string) }, (delta) => ({
+			kind: "thinking" as const,
+			delta,
+		}))
+		.with({ type: "toolcall_delta", delta: P.select(P.string) }, (delta) => ({
+			kind: "tool" as const,
+			delta,
+		}))
+		.otherwise(() => undefined)
 
 export default function blips(pi: ExtensionAPI): void {
-  const config = defaultConfig
-  const player = createPlayer(config)
+	let config: BlipConfig = defaultConfig
+	let player: Player = createPlayer(config)
+	const enabled: Record<StreamKind, boolean> = { text: true, thinking: true, tool: true }
+	const pending: Record<StreamKind, number> = { text: 0, thinking: 0, tool: 0 }
 
-  const enabled: Record<StreamKind, boolean> = {
-    text: config.voices.text.enabled,
-    thinking: config.voices.thinking.enabled,
-    tool: config.voices.tool.enabled,
-  }
-  const pending: Record<StreamKind, number> = { text: 0, thinking: 0, tool: 0 }
+	/** Re-read `blips.json`, rebuild the player, and report what happened. */
+	const reload = (cwd: string): string => {
+		const { config: loaded, sources, problems } = loadSettings(cwd)
+		player.dispose()
+		config = loaded
+		player = createPlayer(config)
+		for (const kind of KINDS) enabled[kind] = config.voices[kind].enabled
 
-  pi.on("message_update", async (event) => {
-    const chunk = chunkOf(event.assistantMessageEvent)
-    if (chunk === undefined || !enabled[chunk.kind]) return
+		const from = sources.length === 0 ? "defaults" : sources.join(", ")
+		return [`${config.backend}, ${from}`, ...problems].join(" | ")
+	}
 
-    const voice = config.voices[chunk.kind]
-    for (const char of chunk.delta) {
-      pending[chunk.kind] += 1
-      if (pending[chunk.kind] < voice.charsPerBlip) continue
-      pending[chunk.kind] = 0
+	pi.on("session_start", async (_event, ctx) => {
+		const summary = reload(ctx.cwd)
+		if (summary.includes("|")) ctx.ui.notify(`Blips: ${summary}`, "warning")
+	})
 
-      const frequency = pitchFromCharacter(char, voice)
-      if (frequency !== undefined) {
-        player.play({ frequency, toneMs: voice.toneMs, volume: voice.volume })
-      }
-    }
-  })
+	pi.on("message_update", async (event) => {
+		const chunk = chunkOf(event.assistantMessageEvent)
+		if (chunk === undefined || !enabled[chunk.kind]) return
 
-  pi.on("message_end", async () => {
-    pending.text = 0
-    pending.thinking = 0
-    pending.tool = 0
-  })
+		const voice = config.voices[chunk.kind]
+		for (const char of chunk.delta) {
+			pending[chunk.kind] += 1
+			if (pending[chunk.kind] < voice.charsPerBlip) continue
+			pending[chunk.kind] = 0
 
-  pi.on("session_shutdown", async () => {
-    player.dispose()
-  })
+			const frequency = pitchFromCharacter(char, voice)
+			if (frequency !== undefined) {
+				player.play({ frequency, toneMs: voice.toneMs, volume: voice.volume })
+			}
+		}
+	})
 
-  pi.registerCommand("blips", {
-    description: "Toggle blips: /blips [on|off|text|thinking|tool]",
-    handler: async (args, ctx) => {
-      const status = (): string =>
-        (["text", "thinking", "tool"] as const)
-          .map((kind) => `${kind} ${enabled[kind] ? "on" : "off"}`)
-          .join(", ")
+	pi.on("message_end", async () => {
+		for (const kind of KINDS) pending[kind] = 0
+	})
 
-      const message = match(args.trim().toLowerCase())
-        .with("on", "off", (arg) => {
-          const on = arg === "on"
-          enabled.text = on
-          enabled.thinking = on
-          enabled.tool = on
-          if (!on) player.dispose()
-          return status()
-        })
-        .with("text", "thinking", "tool", (kind) => {
-          enabled[kind] = !enabled[kind]
-          return status()
-        })
-        .otherwise(() => {
-          const silent = !enabled.text && !enabled.thinking && !enabled.tool
-          enabled.text = silent
-          enabled.thinking = silent
-          enabled.tool = silent
-          if (!silent) player.dispose()
-          return status()
-        })
+	pi.on("session_shutdown", async () => {
+		player.dispose()
+	})
 
-      ctx.ui.notify(`Blips: ${message}`, "info")
-    },
-  })
+	pi.registerCommand("blips", {
+		description: "Blips: /blips [on|off|text|thinking|tool|reload|where]",
+		handler: async (args, ctx) => {
+			const status = (): string =>
+				KINDS.map((kind) => `${kind} ${enabled[kind] ? "on" : "off"}`).join(", ")
+
+			const message = match(args.trim().toLowerCase())
+				.with("on", "off", (arg) => {
+					const on = arg === "on"
+					for (const kind of KINDS) enabled[kind] = on
+					if (!on) player.dispose()
+					return status()
+				})
+				.with("text", "thinking", "tool", (kind) => {
+					enabled[kind] = !enabled[kind]
+					return status()
+				})
+				.with("reload", () => reload(ctx.cwd))
+				.with("where", () => settingsPaths(ctx.cwd).join(", "))
+				.otherwise(() => {
+					const silent = !enabled.text && !enabled.thinking && !enabled.tool
+					for (const kind of KINDS) enabled[kind] = silent
+					if (!silent) player.dispose()
+					return status()
+				})
+
+			ctx.ui.notify(`Blips: ${message}`, "info")
+		},
+	})
 }

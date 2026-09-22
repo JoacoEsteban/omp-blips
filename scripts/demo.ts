@@ -3,9 +3,10 @@
  * Usage: bun run scripts/demo.ts "some text" [text|thinking|tool] [afplay|ffplay] [wrap|fold]
  */
 import { match, P } from "ts-pattern"
-import { type Backend, defaultConfig, type StreamKind, type VoiceConfig } from "../src/config.ts"
+import { type Backend, type StreamKind, type VoiceConfig } from "../src/config.ts"
 import { pitchFromCharacter } from "../src/pitch.ts"
 import { createPlayer } from "../src/player.ts"
+import { loadSettings } from "../src/settings.ts"
 
 const sleep = (ms: number): Promise<void> => {
  const { promise, resolve } = Promise.withResolvers<void>()
@@ -18,21 +19,23 @@ const kind: StreamKind = match(process.argv[3])
  .with("thinking", () => "thinking" as const)
  .with("tool", () => "tool" as const)
  .otherwise(() => "text" as const)
+const { config: loaded, sources, problems } = loadSettings(process.cwd())
 const backend: Backend = match(process.argv[4])
- .with("afplay", () => "afplay" as const)
- .otherwise(() => defaultConfig.backend)
+ .with("afplay", "ffplay", (name) => name)
+ .otherwise(() => loaded.backend)
 const mapping = match(process.argv[5])
- .with("wrap", () => "wrap" as const)
- .with("fold", () => "fold" as const)
+ .with("wrap", "fold", (name) => name)
  .otherwise(() => undefined)
 
-const config = { ...defaultConfig, backend }
+const config = { ...loaded, backend }
 const base = config.voices[kind]
 const voice: VoiceConfig = match(mapping)
  .with(P.not(P.nullish), (name) => ({ ...base, mapping: name }))
  .otherwise(() => base)
 const player = createPlayer(config)
 console.log(`backend: ${backend}, voice: ${kind}, mapping: ${voice.mapping}`)
+console.log(`settings: ${sources.length === 0 ? "defaults" : sources.join(", ")}`)
+for (const problem of problems) console.log(`problem: ${problem}`)
 
 let pending = 0
 for (const char of text) {

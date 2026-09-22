@@ -1,0 +1,27 @@
+{
+	"backend": "ffplay",
+	"minIntervalMs": 70,
+	"voices": {
+		"text": {
+			"enabled": true,
+			"charsPerBlip": 3,
+			"toneMs": 55,
+			"volume": 0.35,
+			"baseFrequency": 220,
+			"scale": [0, 2, 4, 7, 9],
+			"octaves": 3,
+			"mapping": "wrap"
+		},
+		"thinking": {
+			"charsPerBlip": 4,
+			"volume": 0.32,
+			"baseFrequency": 146.83,
+			"scale": [0, 3, 5, 7, 10],
+			"octaves": 2,
+			"mapping": "fold"
+		},
+		"tool": {
+			"enabled": false
+		}
+	}
+}

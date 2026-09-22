@@ -68,7 +68,8 @@ mise run link      # symlinks the repo into ~/.omp/agent/extensions/omp-blips
 ```
 
 Restart `omp`. `/blips` toggles everything; `/blips on|off` forces it; `/blips text`,
-`/blips thinking`, `/blips tool` toggle one voice.
+`/blips thinking`, `/blips tool` toggle one voice; `/blips reload` re-reads config; `/blips where`
+lists the config paths.
 
 ## Development
 
@@ -77,10 +78,33 @@ mise run typecheck
 mise run demo -- "the quick brown fox" text ffplay fold   # phrase, voice, backend, mapping
 ```
 
-## Tuning
+## Configuration
 
-Global knobs in `src/config.ts`: `backend`, `minIntervalMs`. Per-voice knobs under `voices`:
-`enabled`, `charsPerBlip`, `toneMs`, `volume`, `baseFrequency`, `scale`, `octaves`, `mapping`.
+Nothing needs editing in `src/`. Drop a `blips.json` in either place — later wins, both optional,
+each one overlaid field by field on the defaults:
+
+1. `~/.omp/agent/blips.json` (or `$PI_CODING_AGENT_DIR/blips.json`)
+2. `<project>/.omp/blips.json`
+
+```json
+{
+  "backend": "ffplay",
+  "minIntervalMs": 70,
+  "voices": {
+    "thinking": { "charsPerBlip": 3, "volume": 0.4, "mapping": "fold" },
+    "tool": { "enabled": false }
+  }
+}
+```
+
+See `blips.example.json` for every key. Top level: `backend`, `minIntervalMs`. Per voice under
+`voices.text` / `voices.thinking` / `voices.tool`: `enabled`, `charsPerBlip`, `toneMs`, `volume`,
+`baseFrequency`, `scale`, `octaves`, `mapping`.
+
+The file is schema-validated and unknown keys are rejected, so a typo is reported at session start
+instead of silently changing nothing. A bad file is skipped whole rather than half-applied — the
+previous settings stay in force. `/blips reload` re-reads without restarting; `/blips where` prints
+the paths being checked.
 
 ## Platform
 

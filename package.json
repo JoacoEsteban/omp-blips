@@ -12,7 +12,8 @@
     "demo": "bun run scripts/demo.ts"
   },
   "dependencies": {
-    "ts-pattern": "^5.9.0"
+    "ts-pattern": "^5.9.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@oh-my-pi/pi-coding-agent": "^18.2.8",
