@@ -15,12 +15,14 @@
     "@flyingrobots/bijou": "^7.2.0",
     "@flyingrobots/bijou-node": "^7.2.0",
     "@flyingrobots/bijou-tui": "^7.2.0",
+    "esfuzz": "^0.3.1",
     "ts-pattern": "^5.9.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@oh-my-pi/pi-coding-agent": "^18.2.8",
     "@types/bun": "^1.4.2",
+    "lorem-ipsum": "^3.0.0",
     "typescript": "^5.9.3"
   }
 }

@@ -14,7 +14,7 @@ description = "Play the same phrase through every preset"
 run = "bun run scripts/audition.ts"
 
 [tasks.lab]
-description = "Compare presets and materials against a live text stream"
+description = "Compare presets and materials against generated prose and code streams"
 run = "bun run scripts/lab.ts"
 
 [tasks.link]

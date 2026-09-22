@@ -253,7 +253,7 @@ before stay in use. The extension never stops the session because of a configura
 | `mise run typecheck` | Examines the types with `tsc`. |
 | `mise run demo` | Plays a text through the pitch code and the backend. |
 | `mise run audition` | Plays the same text through every preset. |
-| `mise run lab` | Compares presets and materials while a text stream plays. |
+| `mise run lab` | Compares presets and materials with generated prose and code streams. |
 
 The demo command accepts seven arguments: the text, the voice, the backend, the mapping, the preset, the material, and the touch. Each argument after the text is optional.
 
@@ -261,8 +261,27 @@ The demo command accepts seven arguments: the text, the voice, the backend, the 
 mise run demo -- "the quick brown fox" text ffplay fold gamelan glass normal
 ```
 
-The sound lab uses the text voice. Press left or right to select a preset. Press up or down to
-select a material. Press Space to pause the stream, and press `q` to exit.
+The sound lab has two modes. Prose uses `lorem-ipsum` and the text voice. Call uses `esfuzz` JavaScript and the tool voice.
+The call sample is raw code, not a JSON tool-call payload. The lab never runs the generated code.
+
+Each mode generates a fresh sample when the current sample ends. Preset and material changes keep the current sample.
+The selected material applies to both voices. Switching modes restarts the selected sample and preserves the speed and pause state.
+
+| Key | Action |
+|---|---|
+| Tab | Switch between prose and call. |
+| `r` | Generate a new sample for the selected mode. |
+| Left / Right | Select a preset. |
+| Up / Down | Select a material. |
+| `[` / `]` | Decrease / increase the stream speed. |
+| Space | Pause or resume the stream. |
+| `q` | Exit the lab. |
+
+If code generation returns eight empty samples, the lab shows an error and stops the call stream.
+Press `r` to retry. The previous sample remains stored but does not repeat automatically.
+
+The call stream uses `esfuzz.render(esfuzz.generate({ maxDepth: 8 }))`.
+`esfuzz` generates parser-fuzzing input, not representative application code.
 
 Compare materials with the same phrase, mapping, and touch:
 
