@@ -2,7 +2,7 @@ import type { ExtensionAPI, MessageUpdateEvent } from "@oh-my-pi/pi-coding-agent
 import { match, P } from "ts-pattern"
 import { defaultConfig, type BlipConfig, type StreamKind } from "./config.ts"
 import { pitchFromCharacter } from "./pitch.ts"
-import { createPlayer, type Player } from "./player.ts"
+import { createPlayer, type VoicedPlayer } from "./player.ts"
 import { type PresetName, presetNames, presets } from "./presets.ts"
 import { loadSettings, settingsPaths } from "./settings.ts"
 
@@ -127,9 +127,19 @@ const parse = (args: string): readonly [string, string] =>
 
 export default function blips(pi: ExtensionAPI): void {
 	let config: BlipConfig = defaultConfig
-	let player: Player = createPlayer(config)
-	const enabled: Record<StreamKind, boolean> = { text: true, thinking: true, tool: true }
+	let player: VoicedPlayer = createPlayer(config)
+	/**
+	 * A `/blips` toggle is a session override laid over the configured value, not
+	 * a copy of it: a later `reload` or `preset` rebuilds the config underneath
+	 * without discarding what the user asked for.
+	 */
+	const override: Record<StreamKind, boolean | undefined> = {
+		text: undefined,
+		thinking: undefined,
+		tool: undefined,
+	}
 	const pending: Record<StreamKind, number> = { text: 0, thinking: 0, tool: 0 }
+	const isEnabled = (kind: StreamKind): boolean => override[kind] ?? config.voices[kind].enabled
 
 	let chosen: PresetName | undefined
 
@@ -139,7 +149,6 @@ export default function blips(pi: ExtensionAPI): void {
 		player.dispose()
 		config = loaded
 		player = createPlayer(config)
-		for (const kind of KINDS) enabled[kind] = config.voices[kind].enabled
 
 		const from = sources.length === 0 ? "defaults" : sources.join(", ")
 		return [`preset ${preset}, ${config.backend}, ${from}`, ...problems].join(" | ")
@@ -161,25 +170,27 @@ export default function blips(pi: ExtensionAPI): void {
 
 	pi.on("message_update", async (event) => {
 		const chunk = chunkOf(event.assistantMessageEvent)
-		if (chunk === undefined || !enabled[chunk.kind]) return
+		if (chunk === undefined || !isEnabled(chunk.kind)) return
 
 		const voice = config.voices[chunk.kind]
 		for (const char of chunk.delta) {
+			// Silent characters must not spend the budget: counting them would make
+			// the effective rate depend on how much punctuation the stream holds.
+			const frequency = pitchFromCharacter(char, voice)
+			if (frequency === undefined) continue
+
 			pending[chunk.kind] += 1
 			if (pending[chunk.kind] < voice.charsPerBlip) continue
 			pending[chunk.kind] = 0
 
-			const frequency = pitchFromCharacter(char, voice)
-			if (frequency !== undefined) {
-				player.play({
-					frequency,
-					toneMs: voice.toneMs,
-					decay: voice.decay,
-					material: voice.material,
-					touch: voice.touch,
-					volume: voice.volume,
-				})
-			}
+			player.play(chunk.kind, {
+				frequency,
+				toneMs: voice.toneMs,
+				decay: voice.decay,
+				material: voice.material,
+				touch: voice.touch,
+				volume: voice.volume,
+			})
 		}
 	})
 
@@ -192,16 +203,16 @@ export default function blips(pi: ExtensionAPI): void {
 	})
 
 	const status = (): string =>
-		KINDS.map((kind) => `${kind} ${enabled[kind] ? "on" : "off"}`).join(", ")
+		KINDS.map((kind) => `${kind} ${isEnabled(kind) ? "on" : "off"}`).join(", ")
 
 	const setAll = (on: boolean): string => {
-		for (const kind of KINDS) enabled[kind] = on
+		for (const kind of KINDS) override[kind] = on
 		if (!on) player.dispose()
 		return status()
 	}
 
 	const toggle = (kind: StreamKind): string => {
-		enabled[kind] = !enabled[kind]
+		override[kind] = !isEnabled(kind)
 		return status()
 	}
 
@@ -238,7 +249,7 @@ export default function blips(pi: ExtensionAPI): void {
 				.with(P.nonNullable, (sub) => sub.run(argument, ctx.cwd))
 				.otherwise(() =>
 					match(name)
-						.with("", () => setAll(!KINDS.some((kind) => enabled[kind])))
+						.with("", () => setAll(!KINDS.some(isEnabled)))
 						.otherwise((unknown) => `unknown "${unknown}" — ${usage(subcommands)}`),
 				)
 

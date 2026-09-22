@@ -21,7 +21,8 @@ The extension gives each of the three types a different voice. For each voice, o
 
 A character becomes a number: `a` is 0, `z` is 25, and the digits continue above the letters. All
 other characters are silent. Because space and punctuation are silent, the rhythm of the blips
-follows the words of the text.
+follows the words of the text. A silent character does not count towards `charsPerBlip`, so the rate
+stays the same in prose and in dense tool arguments.
 
 A mapping turns this number into a position in a musical scale. The scales use five or six notes per octave.
 
@@ -54,7 +55,9 @@ The cache key includes the exact frequency, duration, material, touch, and a sou
 
 Old cache files remain in `$TMPDIR/omp-blips`. New sound keys prevent reuse of old fixed-synth files.
 
-The `minIntervalMs` option sets the minimum time between two blips. A fast stream loses blips and does not become a mass of sound.
+The `minIntervalMs` option sets the minimum time between two blips of the same voice. A fast stream
+loses blips and does not become a mass of sound. Each voice has its own floor, so a long block of
+reasoning does not take the blips of the answer text.
 
 ## Presets
 
@@ -187,7 +190,7 @@ To remove the symbolic link, run `mise run unlink`.
 | `/blips tool` | Starts or stops the voice for the tool arguments. |
 | `/blips presets` | Shows the list of presets. |
 | `/blips preset <name>` | Uses this preset until the session ends. |
-| `/blips reload` | Reads the configuration files again. A restart is not necessary. |
+| `/blips reload` | Reads the configuration files again. A restart is not necessary. It keeps the voices that you started or stopped. |
 | `/blips where` | Shows the paths of the configuration files. |
 
 The command completes its arguments. Type `/blips ` and the dropdown shows each subcommand with
@@ -223,14 +226,14 @@ preset, then the first file, then the second file. A file gives only the keys th
 |---|---|---|
 | `backend` | `"ffplay"` or `"afplay"` | The backend that plays the tones. |
 | `preset` | a preset name | The preset that gives the start values. |
-| `minIntervalMs` | number | The minimum time in milliseconds between two blips. |
+| `minIntervalMs` | number | The minimum time in milliseconds between two blips of the same voice. |
 
 Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts these keys:
 
 | Key | Type | Function |
 |---|---|---|
 | `enabled` | boolean | Starts this voice at the start of a session. |
-| `charsPerBlip` | integer | The number of characters for one blip. |
+| `charsPerBlip` | integer | The number of sounded characters for one blip. Silent characters do not count. |
 | `toneMs` | number | The length of one tone in milliseconds. |
 | `decay` | positive number | Multiplies the material's decay rate. Lower values ring longer. |
 | `volume` | number from 0 to 1 | The loudness of this voice. |

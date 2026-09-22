@@ -1,6 +1,6 @@
 import type { BlipConfig, StreamKind } from "../src/config.ts"
 import { pitchFromCharacter } from "../src/pitch.ts"
-import type { Player } from "../src/player.ts"
+import type { VoicedPlayer } from "../src/player.ts"
 
 export const sleep = (ms: number): Promise<void> => {
 	const { promise, resolve } = Promise.withResolvers<void>()
@@ -10,7 +10,7 @@ export const sleep = (ms: number): Promise<void> => {
 
 /** Feed a phrase through the real pitch path at streaming speed. */
 export const playText = async (
-	player: Player,
+	player: VoicedPlayer,
 	config: BlipConfig,
 	kind: StreamKind,
 	text: string,
@@ -20,21 +20,22 @@ export const playText = async (
 	let pending = 0
 
 	for (const char of text) {
-		pending += 1
-		if (pending < voice.charsPerBlip) continue
-		pending = 0
-
+		// Same rule as the extension: only a pitched character spends the budget.
 		const frequency = pitchFromCharacter(char, voice)
 		if (frequency !== undefined) {
-			onBlip?.(char, frequency)
-			player.play({
-				frequency,
-				toneMs: voice.toneMs,
-				decay: voice.decay,
-				material: voice.material,
-				touch: voice.touch,
-				volume: voice.volume,
-			})
+			pending += 1
+			if (pending >= voice.charsPerBlip) {
+				pending = 0
+				onBlip?.(char, frequency)
+				player.play(kind, {
+					frequency,
+					toneMs: voice.toneMs,
+					decay: voice.decay,
+					material: voice.material,
+					touch: voice.touch,
+					volume: voice.volume,
+				})
+			}
 		}
 		await sleep(config.minIntervalMs)
 	}
