@@ -30,6 +30,101 @@ const chunkOf = (event: MessageUpdateEvent["assistantMessageEvent"]): Chunk | un
 		}))
 		.otherwise(() => undefined)
 
+/**
+ * Structural stand-in for pi-tui's `AutocompleteItem`: the TUI package is only a
+ * transitive dependency, so the shape is restated rather than imported.
+ */
+interface Completion {
+	readonly value: string
+	readonly label: string
+	readonly description: string
+	readonly hint?: string
+}
+
+interface Subcommand {
+	readonly name: string
+	readonly description: string
+	/** Set when a further word follows the name; says how to complete it. */
+	readonly argument?: {
+		readonly hint: string
+		readonly complete: (prefix: string) => readonly Completion[]
+	}
+	readonly run: (argument: string, cwd: string) => string
+}
+
+const presetList = (): string =>
+	presetNames.map((key) => `${key} — ${presets[key].description}`).join("\n")
+
+/** Second-level items repeat their subcommand: the chosen `value` replaces the whole argument. */
+const presetCompletions = (prefix: string): readonly Completion[] =>
+	presetNames
+		.filter((name) => name.startsWith(prefix))
+		.map((name) => ({
+			value: `preset ${name}`,
+			label: name,
+			description: presets[name].description,
+		}))
+
+const itemFor = (sub: Subcommand): Completion =>
+	match(sub.argument)
+		.with(P.nullish, () => ({ value: sub.name, label: sub.name, description: sub.description }))
+		.otherwise(({ hint }) => ({
+			value: `${sub.name} `,
+			label: sub.name,
+			description: sub.description,
+			hint,
+		}))
+
+const argumentItems = (
+	subcommands: readonly Subcommand[],
+	name: string,
+	prefix: string,
+): readonly Completion[] =>
+	match(subcommands.find((sub) => sub.name === name))
+		.with({ argument: { complete: P.select() } }, (complete) => complete(prefix))
+		.otherwise(() => [])
+
+/**
+ * The TUI hands over everything typed after `/blips` and replaces all of it with
+ * the chosen `value`. A prefix with no space is still the subcommand word;
+ * anything past the first space belongs to that subcommand.
+ */
+const completionsFor = (
+	subcommands: readonly Subcommand[],
+	argumentPrefix: string,
+): readonly Completion[] =>
+	match(/^(\S*)\s+(.*)$/s.exec(argumentPrefix))
+		.with([P._, P.select("name", P.string), P.select("rest", P.string)], ({ name, rest }) =>
+			argumentItems(subcommands, name.toLowerCase(), rest.trimStart().toLowerCase()),
+		)
+		.otherwise(() =>
+			subcommands.filter((sub) => sub.name.startsWith(argumentPrefix.toLowerCase())).map(itemFor),
+		)
+
+/** The dropdown wants `null` rather than an empty list when nothing matches. */
+const offer = (items: readonly Completion[]): Completion[] | null =>
+	match(items)
+		.with([], () => null)
+		.otherwise((found) => [...found])
+
+const usage = (subcommands: readonly Subcommand[]): string =>
+	`/blips [${subcommands
+		.map((sub) =>
+			match(sub.argument)
+				.with(P.nullish, () => sub.name)
+				.otherwise(({ hint }) => `${sub.name} ${hint}`),
+		)
+		.join("|")}]`
+
+/** Everything after `/blips `, split into the subcommand word and the rest. */
+const parse = (args: string): readonly [string, string] =>
+	match(/^(\S+)\s*(.*)$/s.exec(args.trim()))
+		.with([P._, P.select("name", P.string), P.select("rest", P.string)], ({ name, rest }): readonly [string, string] => [
+			name.toLowerCase(),
+			rest.trim(),
+		])
+		.otherwise((): readonly [string, string] => ["", ""])
+
 export default function blips(pi: ExtensionAPI): void {
 	let config: BlipConfig = defaultConfig
 	let player: Player = createPlayer(config)
@@ -53,9 +148,7 @@ export default function blips(pi: ExtensionAPI): void {
 	/** `/blips preset <name>` holds until the session ends; a bad name lists the options. */
 	const usePreset = (cwd: string, name: string): string =>
 		match(presetNames.find((candidate) => candidate === name))
-			.with(P.nullish, () =>
-				presetNames.map((key) => `${key} — ${presets[key].description}`).join("\n"),
-			)
+			.with(P.nullish, () => `unknown preset "${name}"\n${presetList()}`)
 			.otherwise((valid) => {
 				chosen = valid
 				return reload(cwd)
@@ -97,37 +190,56 @@ export default function blips(pi: ExtensionAPI): void {
 		player.dispose()
 	})
 
-	pi.registerCommand("blips", {
-		description: "Blips: /blips [on|off|text|thinking|tool|preset <name>|presets|reload|where]",
-		handler: async (args, ctx) => {
-			const status = (): string =>
-				KINDS.map((kind) => `${kind} ${enabled[kind] ? "on" : "off"}`).join(", ")
+	const status = (): string =>
+		KINDS.map((kind) => `${kind} ${enabled[kind] ? "on" : "off"}`).join(", ")
 
-			const message = match(args.trim().toLowerCase())
-				.with("on", "off", (arg) => {
-					const on = arg === "on"
-					for (const kind of KINDS) enabled[kind] = on
-					if (!on) player.dispose()
-					return status()
-				})
-				.with("text", "thinking", "tool", (kind) => {
-					enabled[kind] = !enabled[kind]
-					return status()
-				})
-				.with("reload", () => reload(ctx.cwd))
-				.with("presets", () =>
-					presetNames.map((key) => `${key} — ${presets[key].description}`).join("\n"),
+	const setAll = (on: boolean): string => {
+		for (const kind of KINDS) enabled[kind] = on
+		if (!on) player.dispose()
+		return status()
+	}
+
+	const toggle = (kind: StreamKind): string => {
+		enabled[kind] = !enabled[kind]
+		return status()
+	}
+
+	/** One table drives the handler, the usage line, and the dropdown. */
+	const subcommands: readonly Subcommand[] = [
+		{ name: "on", description: "Play every voice", run: () => setAll(true) },
+		{ name: "off", description: "Silence every voice", run: () => setAll(false) },
+		{ name: "text", description: "Toggle the prose voice", run: () => toggle("text") },
+		{ name: "thinking", description: "Toggle the reasoning voice", run: () => toggle("thinking") },
+		{ name: "tool", description: "Toggle the tool-argument voice", run: () => toggle("tool") },
+		{
+			name: "preset",
+			description: "Use a preset for the rest of the session",
+			argument: { hint: "<name>", complete: presetCompletions },
+			run: (argument, cwd) => usePreset(cwd, argument),
+		},
+		{ name: "presets", description: "List the presets", run: () => presetList() },
+		{ name: "reload", description: "Re-read the config files", run: (_argument, cwd) => reload(cwd) },
+		{
+			name: "where",
+			description: "Show the config files that are read",
+			run: (_argument, cwd) => settingsPaths(cwd).join(", "),
+		},
+	]
+
+	pi.registerCommand("blips", {
+		description: `Blips: ${usage(subcommands)}`,
+		getArgumentCompletions: (argumentPrefix) =>
+			offer(completionsFor(subcommands, argumentPrefix)),
+		handler: async (args, ctx) => {
+			const [name, argument] = parse(args)
+
+			const message = match(subcommands.find((sub) => sub.name === name))
+				.with(P.nonNullable, (sub) => sub.run(argument, ctx.cwd))
+				.otherwise(() =>
+					match(name)
+						.with("", () => setAll(!KINDS.some((kind) => enabled[kind])))
+						.otherwise((unknown) => `unknown "${unknown}" — ${usage(subcommands)}`),
 				)
-				.with(P.string.startsWith("preset"), (arg) =>
-					usePreset(ctx.cwd, arg.slice("preset".length).trim()),
-				)
-				.with("where", () => settingsPaths(ctx.cwd).join(", "))
-				.otherwise(() => {
-					const silent = !enabled.text && !enabled.thinking && !enabled.tool
-					for (const kind of KINDS) enabled[kind] = silent
-					if (!silent) player.dispose()
-					return status()
-				})
 
 			ctx.ui.notify(`Blips: ${message}`, "info")
 		},

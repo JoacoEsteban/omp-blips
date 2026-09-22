@@ -190,6 +190,10 @@ To remove the symbolic link, run `mise run unlink`.
 | `/blips reload` | Reads the configuration files again. A restart is not necessary. |
 | `/blips where` | Shows the paths of the configuration files. |
 
+The command completes its arguments. Type `/blips ` and the dropdown shows each subcommand with
+its description. Type `/blips preset ` and it shows each preset name with its description. An
+unknown word shows the usage line instead of a silent change.
+
 ## Configuration
 
 A change to the sound does not need a change to the code in `src/`. Write a file with the name
