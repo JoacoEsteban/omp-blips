@@ -12,7 +12,10 @@ import type { Material } from "../src/synth.ts"
 
 const STREAM_TEXT =
 	"The quick brown fox jumps over the lazy dog while a steady stream of tokens passes through the terminal. "
-const STREAM_DELAY_MS = 35
+const DEFAULT_STREAM_DELAY_MS = 10
+const MIN_STREAM_DELAY_MS = 1
+const MAX_STREAM_DELAY_MS = 1_000
+const STREAM_SPEED_JUMPS = 50
 const DEFAULT_WIDTH = 100
 const DEFAULT_HEIGHT = 24
 const MATERIALS: readonly Material[] = ["wood", "stone", "ceramic", "glass"]
@@ -29,11 +32,13 @@ interface Model {
 	readonly materialIndex: number
 	readonly config: BlipConfig
 	readonly pending: number
+	readonly streamSpeedIndex: number
+	readonly streamOffset: number
 	readonly streamed: string
 	readonly paused: boolean
 }
 
-type Msg = { readonly type: "stream-character"; readonly char: string }
+type Msg = { readonly type: "stream-character" }
 
 interface AuditionPlayer {
 	readonly configure: (config: BlipConfig) => void
@@ -75,9 +80,24 @@ const configFor = (preset: PresetName, material: Material): BlipConfig => {
 const cycle = (current: number, delta: number, length: number): number =>
 	(current + delta + length) % length
 
-const streamCmd = (): Cmd<Msg> => (emit, capabilities) => {
-	let cancelled = false
+const clamp = (value: number, minimum: number, maximum: number): number =>
+	Math.min(Math.max(value, minimum), maximum)
 
+const streamDelayMs = (speedIndex: number): number =>
+	Math.ceil(
+		MAX_STREAM_DELAY_MS * (MIN_STREAM_DELAY_MS / MAX_STREAM_DELAY_MS) **
+		(clamp(speedIndex, 0, STREAM_SPEED_JUMPS) / STREAM_SPEED_JUMPS),
+	)
+
+const speedIndexForDelay = (delayMs: number): number =>
+	Math.round(
+		(Math.log(delayMs / MAX_STREAM_DELAY_MS) / Math.log(MIN_STREAM_DELAY_MS / MAX_STREAM_DELAY_MS)) *
+		STREAM_SPEED_JUMPS,
+	)
+
+const DEFAULT_STREAM_SPEED_INDEX = speedIndexForDelay(DEFAULT_STREAM_DELAY_MS)
+
+const streamCmd = (delayMs: number): Cmd<Msg> => (emit, capabilities) => {
 	const sleep = (ms: number): Promise<void> => {
 		if (capabilities.sleep !== undefined) return capabilities.sleep(ms)
 		const { promise, resolve } = Promise.withResolvers<void>()
@@ -85,18 +105,8 @@ const streamCmd = (): Cmd<Msg> => (emit, capabilities) => {
 		return promise
 	}
 
-	const run = async (): Promise<void> => {
-		let offset = 0
-		while (!cancelled) {
-			await sleep(STREAM_DELAY_MS)
-			if (cancelled) return
-			emit({ type: "stream-character", char: STREAM_TEXT[offset] ?? " " })
-			offset = (offset + 1) % STREAM_TEXT.length
-		}
-	}
-
-	void run()
-	return { dispose: () => { cancelled = true } }
+	void sleep(delayMs).then(() => { emit({ type: "stream-character" }) })
+	return undefined
 }
 
 const configureCmd = (player: AuditionPlayer, config: BlipConfig): Cmd<Msg> => () => {
@@ -120,6 +130,11 @@ const choiceLine = <Value extends string>(
 		.exhaustive(),
 ).join("  ")}`
 
+const speedSlider = (speedIndex: number): string => {
+	const filled = Math.round((speedIndex / STREAM_SPEED_JUMPS) * 12)
+	return `${accent("speed".padEnd(10))}${muted("slow 1000 ms")} ${selected(`${"━".repeat(filled)}●${"━".repeat(12 - filled)}`)} ${muted("1 ms fast")}  ${String(streamDelayMs(speedIndex))} ms`
+}
+
 const createLabApp = (player: AuditionPlayer, initialConfig: BlipConfig): App<Model, Msg> => ({
 	init: () => [
 		{
@@ -129,10 +144,12 @@ const createLabApp = (player: AuditionPlayer, initialConfig: BlipConfig): App<Mo
 			materialIndex: MATERIALS.indexOf(initialConfig.voices.text.material),
 			config: initialConfig,
 			pending: 0,
+			streamSpeedIndex: DEFAULT_STREAM_SPEED_INDEX,
+			streamOffset: 0,
 			streamed: "",
 			paused: false,
 		},
-		[streamCmd()],
+		[streamCmd(streamDelayMs(DEFAULT_STREAM_SPEED_INDEX))],
 	],
 
 	update: (msg, model) =>
@@ -142,7 +159,27 @@ const createLabApp = (player: AuditionPlayer, initialConfig: BlipConfig): App<Mo
 					.returnType<[Model, Cmd<Msg>[]]>()
 					.with({ ctrl: true, key: "c" }, () => [model, [quit<Msg>()]])
 					.with({ key: "q" }, () => [model, [quit<Msg>()]])
-					.with({ key: "space" }, () => [{ ...model, paused: !model.paused }, []])
+					.with({ key: "space" }, (): [Model, Cmd<Msg>[]] => {
+						const paused = !model.paused
+						return [
+							{ ...model, paused },
+							paused ? [] : [streamCmd(streamDelayMs(model.streamSpeedIndex))],
+						]
+					})
+					.with({ key: "[" }, (): [Model, Cmd<Msg>[]] => [
+						{
+							...model,
+							streamSpeedIndex: clamp(model.streamSpeedIndex - 1, 0, STREAM_SPEED_JUMPS),
+						},
+						[],
+					])
+					.with({ key: "]" }, (): [Model, Cmd<Msg>[]] => [
+						{
+							...model,
+							streamSpeedIndex: clamp(model.streamSpeedIndex + 1, 0, STREAM_SPEED_JUMPS),
+						},
+						[],
+					])
 					.with({ key: "left" }, (): [Model, Cmd<Msg>[]] => {
 						const presetIndex = cycle(model.presetIndex, -1, presetNames.length)
 						const preset = presetNames[presetIndex] ?? "default"
@@ -177,26 +214,32 @@ const createLabApp = (player: AuditionPlayer, initialConfig: BlipConfig): App<Mo
 				{ ...model, width: resize.columns, height: resize.rows },
 				[],
 			])
-			.with({ type: "stream-character" }, ({ char }): [Model, Cmd<Msg>[]] => {
+			.with({ type: "stream-character" }, (): [Model, Cmd<Msg>[]] => {
 				if (model.paused) return [model, []]
 
+				const char = STREAM_TEXT[model.streamOffset] ?? " "
 				const streamed = `${model.streamed}${char}`.slice(-Math.max(1, model.width - 4))
 				const pending = model.pending + 1
+				const nextOffset = (model.streamOffset + 1) % STREAM_TEXT.length
 				const voice = model.config.voices.text
+				const continueStreaming = streamCmd(streamDelayMs(model.streamSpeedIndex))
 				if (!voice.enabled || pending < voice.charsPerBlip) {
-					return [{ ...model, streamed, pending }, []]
+					return [
+						{ ...model, streamed, pending, streamOffset: nextOffset },
+						[continueStreaming],
+					]
 				}
 
-				const next = { ...model, streamed, pending: 0 }
+				const next = { ...model, streamed, pending: 0, streamOffset: nextOffset }
 				const frequency = pitchFromCharacter(char, voice)
-				if (frequency === undefined) return [next, []]
+				if (frequency === undefined) return [next, [continueStreaming]]
 				return [next, [playCmd(player, {
 					frequency,
 					toneMs: voice.toneMs,
 					material: voice.material,
 					touch: voice.touch,
 					volume: voice.volume,
-				})]]
+				}), continueStreaming]]
 			})
 			.otherwise((): [Model, Cmd<Msg>[]] => [model, []]),
 
@@ -213,11 +256,11 @@ const createLabApp = (player: AuditionPlayer, initialConfig: BlipConfig): App<Mo
 			"",
 			`${accent("sound")}  ${voice.touch} touch  ${String(voice.toneMs)} ms  ${voice.baseFrequency.toFixed(2)} Hz  every ${String(voice.charsPerBlip)} chars`,
 			`${accent("preset")} ${presets[preset].description}`,
-			"",
+			speedSlider(model.streamSpeedIndex),
 			`${accent("stream")} ${status}`,
 			model.streamed || muted("waiting for text…"),
 			"",
-			muted("←/→ preset   ↑/↓ material   space pause   q quit"),
+			muted("←/→ preset   ↑/↓ material   [ / ] speed   space pause   q quit"),
 		].join("\n")
 		return parseAnsiToSurface(screen, model.width, model.height)
 	},
