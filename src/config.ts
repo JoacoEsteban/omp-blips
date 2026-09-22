@@ -1,3 +1,10 @@
+/**
+ * Playback backend.
+ * - `afplay`: macOS built-in, one process per tone, ~50 ms spawn latency.
+ * - `ffplay`: long-lived PCM sink, near-zero latency and real mixing, needs ffmpeg.
+ */
+export type Backend = "afplay" | "ffplay"
+
 /** Tuning knobs for the blip stream. Every duration is in milliseconds. */
 export interface BlipConfig {
   /** Emit one blip every N streamed characters. */
@@ -6,7 +13,7 @@ export interface BlipConfig {
   readonly minIntervalMs: number
   /** Length of a single tone. */
   readonly toneMs: number
-  /** `afplay -v` gain, 0..1. */
+  /** Output gain, 0..1. */
   readonly volume: number
   /** Frequency of scale degree 0. */
   readonly baseFrequency: number
@@ -16,6 +23,8 @@ export interface BlipConfig {
   readonly octaves: number
   /** Also blip on reasoning deltas. */
   readonly thinking: boolean
+  /** Which playback backend to use. */
+  readonly backend: Backend
 }
 
 /** Major pentatonic: no semitone clashes, so any character sequence stays consonant. */
@@ -29,5 +38,6 @@ export const defaultConfig: BlipConfig = {
   baseFrequency: 220,
   scale: MAJOR_PENTATONIC,
   octaves: 3,
+  backend: "ffplay",
   thinking: false,
 }

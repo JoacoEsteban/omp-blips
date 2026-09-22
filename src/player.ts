@@ -1,45 +1,28 @@
-import { spawn, type ChildProcess } from "node:child_process"
+import { match } from "ts-pattern"
 import type { BlipConfig } from "./config.ts"
-import { toneFile } from "./tone.ts"
+import { createAfplayPlayer } from "./players/afplay.ts"
+import { createFfplayPlayer } from "./players/ffplay.ts"
+import type { Player } from "./players/types.ts"
 
-export interface Player {
-  /** Play a tone unless the rate limit swallows it. Never throws. */
-  readonly play: (frequency: number) => void
-  /** Kill anything still sounding. */
-  readonly dispose: () => void
-}
+export type { Player } from "./players/types.ts"
 
-/** Above this, audio is lagging behind the stream; drop instead of queueing. */
-const MAX_CONCURRENT = 6
+const backend = (config: BlipConfig): Player =>
+  match(config.backend)
+    .with("ffplay", () => createFfplayPlayer(config))
+    .with("afplay", () => createAfplayPlayer(config))
+    .exhaustive()
 
-/**
- * macOS `afplay`, one short-lived process per blip. No native audio bindings,
- * no long-lived sink; the cost is a ~50 ms attack latency, which is fine for
- * ambient feedback.
- */
+/** Backend plus the rate limit that keeps fast streams from stacking tones. */
 export const createPlayer = (config: BlipConfig): Player => {
-  const live = new Set<ChildProcess>()
+  const player = backend(config)
   let lastPlayedAt = 0
 
   const play = (frequency: number): void => {
     const now = performance.now()
     if (now - lastPlayedAt < config.minIntervalMs) return
-    if (live.size >= MAX_CONCURRENT) return
     lastPlayedAt = now
-
-    const child = spawn("afplay", ["-v", config.volume.toFixed(3), toneFile(frequency, config.toneMs)], {
-      stdio: "ignore",
-    })
-    live.add(child)
-    child.on("error", () => live.delete(child))
-    child.on("exit", () => live.delete(child))
-    child.unref()
+    player.play(frequency)
   }
 
-  const dispose = (): void => {
-    for (const child of live) child.kill("SIGKILL")
-    live.clear()
-  }
-
-  return { play, dispose }
+  return { play, dispose: player.dispose }
 }
