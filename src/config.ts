@@ -1,4 +1,5 @@
 import type { MappingName } from "./mapping.ts"
+import { MAJOR_PENTATONIC, MINOR_PENTATONIC } from "./scales.ts"
 
 /**
  * Playback backend.
@@ -37,10 +38,17 @@ export interface BlipConfig {
  readonly voices: Record<StreamKind, VoiceConfig>
 }
 
-/** Major pentatonic: no semitone clashes, so any character sequence stays consonant. */
-const MAJOR_PENTATONIC = [0, 2, 4, 7, 9] as const
-/** Minor pentatonic for reasoning: same no-clash property, darker colour. */
-const MINOR_PENTATONIC = [0, 3, 5, 7, 10] as const
+/** A partial voice, as a preset or a config file supplies it. */
+export type VoicePatch = {
+ readonly [K in keyof VoiceConfig]?: VoiceConfig[K] | undefined
+}
+
+/** A partial config: presets and config files are both this shape. */
+export interface ConfigPatch {
+ readonly minIntervalMs?: number | undefined
+ readonly backend?: Backend | undefined
+ readonly voices?: { readonly [K in StreamKind]?: VoicePatch | undefined } | undefined
+}
 
 export const defaultConfig: BlipConfig = {
  minIntervalMs: 70,

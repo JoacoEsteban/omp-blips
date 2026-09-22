@@ -9,6 +9,10 @@ run = "bun run tsc --noEmit"
 description = "Play a phrase through the blip pipeline"
 run = "bun run scripts/demo.ts"
 
+[tasks.audition]
+description = "Play the same phrase through every preset"
+run = "bun run scripts/audition.ts"
+
 [tasks.link]
 description = "Symlink this repo into the omp user extensions directory"
 run = """

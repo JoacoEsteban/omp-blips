@@ -1,25 +1,21 @@
 /**
  * Plays a phrase through the real pitch + player path, at streaming speed.
- * Usage: bun run scripts/demo.ts "some text" [text|thinking|tool] [afplay|ffplay] [wrap|fold]
+ * Usage: bun run scripts/demo.ts "text" [text|thinking|tool] [afplay|ffplay] [wrap|fold] [preset]
  */
 import { match, P } from "ts-pattern"
-import { type Backend, type StreamKind, type VoiceConfig } from "../src/config.ts"
-import { pitchFromCharacter } from "../src/pitch.ts"
+import type { Backend, StreamKind } from "../src/config.ts"
 import { createPlayer } from "../src/player.ts"
+import { presetNames } from "../src/presets.ts"
 import { loadSettings } from "../src/settings.ts"
-
-const sleep = (ms: number): Promise<void> => {
- const { promise, resolve } = Promise.withResolvers<void>()
- setTimeout(resolve, ms)
- return promise
-}
+import { playText } from "./play.ts"
 
 const text = process.argv[2] ?? "the quick brown fox jumps over the lazy dog 0123456789"
 const kind: StreamKind = match(process.argv[3])
- .with("thinking", () => "thinking" as const)
- .with("tool", () => "tool" as const)
+ .with("thinking", "tool", (name) => name)
  .otherwise(() => "text" as const)
-const { config: loaded, sources, problems } = loadSettings(process.cwd())
+const preset = presetNames.find((name) => name === process.argv[6])
+
+const { config: loaded, preset: used, sources, problems } = loadSettings(process.cwd(), preset)
 const backend: Backend = match(process.argv[4])
  .with("afplay", "ffplay", (name) => name)
  .otherwise(() => loaded.backend)
@@ -27,29 +23,17 @@ const mapping = match(process.argv[5])
  .with("wrap", "fold", (name) => name)
  .otherwise(() => undefined)
 
-const config = { ...loaded, backend }
-const base = config.voices[kind]
-const voice: VoiceConfig = match(mapping)
- .with(P.not(P.nullish), (name) => ({ ...base, mapping: name }))
- .otherwise(() => base)
+const voice = match(mapping)
+ .with(P.not(P.nullish), (name) => ({ ...loaded.voices[kind], mapping: name }))
+ .otherwise(() => loaded.voices[kind])
+const config = { ...loaded, backend, voices: { ...loaded.voices, [kind]: voice } }
 const player = createPlayer(config)
-console.log(`backend: ${backend}, voice: ${kind}, mapping: ${voice.mapping}`)
+
+console.log(`preset: ${used}, backend: ${backend}, voice: ${kind}, mapping: ${voice.mapping}`)
 console.log(`settings: ${sources.length === 0 ? "defaults" : sources.join(", ")}`)
 for (const problem of problems) console.log(`problem: ${problem}`)
 
-let pending = 0
-for (const char of text) {
- pending += 1
- if (pending < voice.charsPerBlip) continue
- pending = 0
-
- const frequency = pitchFromCharacter(char, voice)
- if (frequency !== undefined) {
-  console.log(`${char} -> ${frequency.toFixed(1)} Hz`)
-  player.play({ frequency, toneMs: voice.toneMs, volume: voice.volume })
- }
- await sleep(config.minIntervalMs)
-}
-
-await sleep(voice.toneMs * 6)
+await playText(player, config, kind, text, (char, frequency) =>
+ console.log(`${char} -> ${frequency.toFixed(1)} Hz`),
+)
 player.dispose()

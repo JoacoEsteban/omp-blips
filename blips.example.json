@@ -1,4 +1,5 @@
 {
+	"preset": "default",
 	"backend": "ffplay",
 	"minIntervalMs": 70,
 	"voices": {

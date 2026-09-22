@@ -3,7 +3,14 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { match, P } from "ts-pattern"
 import { z } from "zod"
-import { type BlipConfig, defaultConfig, type StreamKind, type VoiceConfig } from "./config.ts"
+import {
+	type BlipConfig,
+	type ConfigPatch,
+	defaultConfig,
+	type VoiceConfig,
+	type VoicePatch,
+} from "./config.ts"
+import { type PresetName, presetNames, presets } from "./presets.ts"
 
 const voiceSchema = z
 	.object({
@@ -21,6 +28,7 @@ const voiceSchema = z
 
 const settingsSchema = z
 	.object({
+		preset: z.enum(presetNames as [PresetName, ...PresetName[]]),
 		minIntervalMs: z.number().min(0),
 		backend: z.enum(["afplay", "ffplay"]),
 		voices: z
@@ -41,6 +49,8 @@ export const settingsPaths = (cwd: string): readonly string[] => [
 
 export interface LoadedSettings {
 	readonly config: BlipConfig
+	/** The preset the config was built on. */
+	readonly preset: PresetName
 	/** Files that were read, in precedence order. */
 	readonly sources: readonly string[]
 	/** Human-readable reasons a file was ignored; never thrown. */
@@ -64,8 +74,6 @@ const readSettings = (path: string): BlipSettings | string =>
 				.otherwise((result) => `${path}: ${z.prettifyError(result.error)}`),
 		)
 
-type VoicePatch = NonNullable<NonNullable<BlipSettings["voices"]>[StreamKind]>
-
 /** Field-by-field so `exactOptionalPropertyTypes` never leaks an `undefined` into a voice. */
 const mergeVoice = (base: VoiceConfig, patch: VoicePatch = {}): VoiceConfig => ({
 	enabled: patch.enabled ?? base.enabled,
@@ -78,7 +86,8 @@ const mergeVoice = (base: VoiceConfig, patch: VoicePatch = {}): VoiceConfig => (
 	mapping: patch.mapping ?? base.mapping,
 })
 
-const merge = (base: BlipConfig, patch: BlipSettings): BlipConfig => ({
+/** Lay a patch over a full config. Presets and config files take the same path. */
+export const applyPatch = (base: BlipConfig, patch: ConfigPatch): BlipConfig => ({
 	minIntervalMs: patch.minIntervalMs ?? base.minIntervalMs,
 	backend: patch.backend ?? base.backend,
 	voices: {
@@ -89,27 +98,37 @@ const merge = (base: BlipConfig, patch: BlipSettings): BlipConfig => ({
 })
 
 /**
- * Defaults overlaid with `blips.json` from the agent directory and then the
- * project. A malformed or unknown-keyed file is reported and skipped rather
- * than silently half-applied, so a typo never leaves you guessing at the sound.
+ * Defaults, then a preset, then `blips.json` from the agent directory, then the
+ * project. A malformed or unknown-keyed file is reported and skipped rather than
+ * silently half-applied, so a typo never leaves you guessing at the sound.
+ *
+ * `preset` overrides the name the files ask for; that is how `/blips preset` works.
  */
-export const loadSettings = (cwd: string): LoadedSettings => {
+export const loadSettings = (cwd: string, preset?: PresetName): LoadedSettings => {
 	const sources: string[] = []
 	const problems: string[] = []
 
-	const config = settingsPaths(cwd)
+	const patches = settingsPaths(cwd)
 		.filter((path) => existsSync(path))
-		.reduce((acc, path) =>
+		.flatMap((path) =>
 			match(readSettings(path))
 				.with(P.string, (problem) => {
 					problems.push(problem)
-					return acc
+					return []
 				})
 				.otherwise((patch) => {
 					sources.push(path)
-					return merge(acc, patch)
+					return [patch]
 				}),
-			defaultConfig)
+		)
 
-	return { config, sources, problems }
+	const name =
+		preset ?? patches.reduce<PresetName>((acc, patch) => patch.preset ?? acc, "default")
+
+	const config = patches.reduce<BlipConfig>(
+		applyPatch,
+		applyPatch(defaultConfig, presets[name].patch),
+	)
+
+	return { config, preset: name, sources, problems }
 }

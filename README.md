@@ -30,7 +30,38 @@ keeps it in memory.
 The option `minIntervalMs` sets the minimum time between two blips. A fast stream loses blips and
 does not become a mass of sound.
 
+## Presets
+
+A preset is a complete set of values for the three voices. The file `src/presets.ts` holds the
+presets. The default preset has the name `default`.
+
+| Preset | Sound |
+|---|---|
+| `default` | A melody for the text, a dark murmur for the reasoning, bright ticks for the tools. |
+| `arcade` | Fast small tones in a high range. A text crawl from a 1988 video game. |
+| `gamelan` | Struck metal. The long tones continue and mix into a haze. |
+| `sonar` | A submarine. One slow low ping after each few words. |
+| `typewriter` | Mechanical keys. The pitch changes very little, so you hear rhythm. |
+| `music-box` | A wind-up music box. High, sweet, and in small steps. |
+| `quiet` | Background sound. Text only, low volume, large spaces between the blips. |
+
+To hear all presets one after the other, run `mise run audition`.
+
+To select a preset, write its name in a configuration file:
+
+```json
+{ "preset": "gamelan" }
+```
+
+A configuration file can also change single values of the preset. The extension applies the preset
+first, then the file.
+
+To try a preset in a session, run `/blips preset gamelan`. This selection stays until the session
+ends. To see the list of names, run `/blips presets`.
+
 ## Voices
+
+These values are the values of the preset `default`. Another preset gives other values.
 
 | Stream | Lowest pitch | Range | Scale | Mapping | Sound |
 |---|---|---|---|---|---|
@@ -40,6 +71,23 @@ does not become a mass of sound.
 
 The `tool` voice makes fewer blips than the other two voices. Tool arguments are JSON and contain
 many characters.
+
+## Scales
+
+The file `src/scales.ts` holds the scales. Each scale has five or six notes in one octave. Two
+notes that are one semitone apart are not in the same scale. As a result, two blips are never
+dissonant.
+
+| Scale | Sound |
+|---|---|
+| `MAJOR_PENTATONIC` | Bright and neutral. |
+| `MINOR_PENTATONIC` | The same shape, but darker. |
+| `HIRAJOSHI` | Japanese. Metallic, like a bell. |
+| `KUMOI` | Softer than hirajoshi. The color of a music box. |
+| `BLUES` | Restless. It contains the flat fifth. |
+
+A configuration file gives a scale as an array of semitone numbers. The value `[0, 2, 4, 7, 9]` is
+the major pentatonic scale.
 
 ## Mappings
 
@@ -111,6 +159,8 @@ To remove the symbolic link, run `mise run unlink`.
 | `/blips text` | Starts or stops the voice for the answer text. |
 | `/blips thinking` | Starts or stops the voice for the reasoning. |
 | `/blips tool` | Starts or stops the voice for the tool arguments. |
+| `/blips presets` | Shows the list of presets. |
+| `/blips preset <name>` | Uses this preset until the session ends. |
 | `/blips reload` | Reads the configuration files again. A restart is not necessary. |
 | `/blips where` | Shows the paths of the configuration files. |
 
@@ -122,11 +172,12 @@ A change to the sound does not need a change to the code in `src/`. Write a file
 1. `~/.omp/agent/blips.json`, or `$PI_CODING_AGENT_DIR/blips.json` for a different profile.
 2. `<project>/.omp/blips.json`.
 
-The two files are optional. The extension starts with the default values, then applies the first
-file, then applies the second file. A file gives only the keys that it changes.
+The two files are optional. The extension starts with the default values. Then it applies the
+preset, then the first file, then the second file. A file gives only the keys that it changes.
 
 ```json
 {
+  "preset": "gamelan",
   "backend": "ffplay",
   "minIntervalMs": 70,
   "voices": {
@@ -141,6 +192,7 @@ file, then applies the second file. A file gives only the keys that it changes.
 | Key | Type | Function |
 |---|---|---|
 | `backend` | `"ffplay"` or `"afplay"` | The backend that plays the tones. |
+| `preset` | a preset name | The preset that gives the start values. |
 | `minIntervalMs` | number | The minimum time in milliseconds between two blips. |
 
 Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts these keys:
@@ -172,11 +224,13 @@ before stay in use. The extension never stops the session because of a configura
 |---|---|
 | `mise run typecheck` | Examines the types with `tsc`. |
 | `mise run demo` | Plays a text through the pitch code and the backend. |
+| `mise run audition` | Plays the same text through every preset. |
 
-The demo command accepts four arguments: the text, the voice, the backend, and the mapping.
+The demo command accepts five arguments: the text, the voice, the backend, the mapping, and the
+preset. Each argument after the text is optional.
 
 ```sh
-mise run demo -- "the quick brown fox" text ffplay fold
+mise run demo -- "the quick brown fox" text ffplay fold gamelan
 ```
 
 The demo reads the same configuration files as the extension. As a result, the demo sounds like the
