@@ -13,10 +13,10 @@ const MAX_CONCURRENT = 6
 export const createAfplayPlayer = (): Player => {
   const live = new Set<ChildProcess>()
 
-  const play = ({ frequency, toneMs, volume }: Tone): void => {
+  const play = (tone: Tone): void => {
     if (live.size >= MAX_CONCURRENT) return
 
-    const child = spawn("afplay", ["-v", volume.toFixed(3), toneFile(frequency, toneMs)], {
+    const child = spawn("afplay", ["-v", tone.volume.toFixed(3), toneFile(tone)], {
       stdio: "ignore",
     })
     live.add(child)

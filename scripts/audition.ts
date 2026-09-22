@@ -15,12 +15,16 @@ const kind: StreamKind = match(process.argv[3])
  .otherwise(() => "text" as const)
 
 for (const name of presetNames) {
- const { config } = loadSettings(process.cwd(), name)
- const player = createPlayer(config)
+	const { config } = loadSettings(process.cwd(), name)
+	const player = createPlayer(config)
+	const voice = config.voices[kind]
 
- console.log(`\n${name} — ${presets[name].description}`)
- await playText(player, config, kind, text)
+	console.log(
+		`\n${name} — ${presets[name].description} (${kind}: ${voice.material}, ${voice.touch})`,
+	)
+	await playText(player, config, kind, text)
 
- player.dispose()
- await sleep(700)
+	player.dispose()
+	await sleep(700)
 }
+

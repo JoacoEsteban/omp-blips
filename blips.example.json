@@ -8,6 +8,8 @@
 			"charsPerBlip": 3,
 			"toneMs": 55,
 			"volume": 0.35,
+			"material": "ceramic",
+			"touch": "normal",
 			"baseFrequency": 220,
 			"scale": [0, 2, 4, 7, 9],
 			"octaves": 3,
@@ -16,12 +18,16 @@
 		"thinking": {
 			"charsPerBlip": 4,
 			"volume": 0.32,
+			"material": "wood",
+			"touch": "soft",
 			"baseFrequency": 146.83,
 			"scale": [0, 3, 5, 7, 10],
 			"octaves": 2,
 			"mapping": "fold"
 		},
 		"tool": {
+			"material": "glass",
+			"touch": "soft",
 			"enabled": false
 		}
 	}

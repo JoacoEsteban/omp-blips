@@ -1,7 +1,6 @@
 /**
- * Semitone offsets of one octave. Every scale here is gapped (five or six notes,
- * no adjacent semitones in the reachable set), so two blips played together or
- * back to back are never dissonant, whatever the text does.
+ * Semitone offsets of one octave. Each scale uses five or six notes to leave
+ * different intervals between reachable notes. Modal partials can add color.
  */
 
 /** Bright and neutral. The sound most ears read as "melody". */

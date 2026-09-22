@@ -1,7 +1,7 @@
+import type { Sound } from "../synth.ts"
+
 /** One scheduled blip: everything a backend needs to make a sound. */
-export interface Tone {
-  readonly frequency: number
-  readonly toneMs: number
+export interface Tone extends Sound {
   readonly volume: number
 }
 

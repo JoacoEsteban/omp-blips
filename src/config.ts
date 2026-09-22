@@ -1,5 +1,6 @@
 import type { MappingName } from "./mapping.ts"
 import { MAJOR_PENTATONIC, MINOR_PENTATONIC } from "./scales.ts"
+import type { Material, Touch } from "./synth.ts"
 
 /**
  * Playback backend.
@@ -20,6 +21,10 @@ export interface VoiceConfig {
  readonly toneMs: number
  /** Output gain, 0..1. */
  readonly volume: number
+ /** Modal material for this stream. */
+ readonly material: Material
+ /** Strike force for this stream. */
+ readonly touch: Touch
  /** Frequency of scale degree 0. */
  readonly baseFrequency: number
  /** Semitone offsets of one octave of the scale. */
@@ -60,6 +65,8 @@ export const defaultConfig: BlipConfig = {
    charsPerBlip: 3,
    toneMs: 55,
    volume: 0.35,
+   material: "ceramic",
+   touch: "normal",
    baseFrequency: 220,
    scale: MAJOR_PENTATONIC,
    octaves: 3,
@@ -72,6 +79,8 @@ export const defaultConfig: BlipConfig = {
    charsPerBlip: 4,
    toneMs: 90,
    volume: 0.32,
+   material: "wood",
+   touch: "soft",
    baseFrequency: 146.83,
    scale: MINOR_PENTATONIC,
    octaves: 2,
@@ -83,6 +92,8 @@ export const defaultConfig: BlipConfig = {
    charsPerBlip: 6,
    toneMs: 26,
    volume: 0.22,
+   material: "glass",
+   touch: "soft",
    baseFrequency: 523.25,
    scale: MAJOR_PENTATONIC,
    octaves: 2,

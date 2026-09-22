@@ -78,7 +78,13 @@ export default function blips(pi: ExtensionAPI): void {
 
 			const frequency = pitchFromCharacter(char, voice)
 			if (frequency !== undefined) {
-				player.play({ frequency, toneMs: voice.toneMs, volume: voice.volume })
+				player.play({
+					frequency,
+					toneMs: voice.toneMs,
+					material: voice.material,
+					touch: voice.touch,
+					volume: voice.volume,
+				})
 			}
 		}
 	})

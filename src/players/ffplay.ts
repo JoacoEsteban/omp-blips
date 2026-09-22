@@ -139,11 +139,11 @@ export const createFfplayPlayer = (): Player => {
     ticker.unref?.()
   }
 
-  const play = ({ frequency, toneMs, volume }: Tone): void => {
+  const play = (tone: Tone): void => {
     if (child === undefined) start()
     lastVoiceAt = performance.now()
     if (active.length >= MAX_VOICES) return
-    active.push({ samples: voice(frequency, toneMs), gain: volume, offset: 0 })
+    active.push({ samples: voice(tone), gain: tone.volume, offset: 0 })
   }
 
   return { play, dispose: stop }

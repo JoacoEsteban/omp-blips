@@ -23,12 +23,37 @@ A character becomes a number: `a` is 0, `z` is 25, and the digits continue above
 other characters are silent. Because space and punctuation are silent, the rhythm of the blips
 follows the words of the text.
 
-A mapping turns this number into a position in a musical scale. All scales are pentatonic, so two
-blips are never dissonant. The file `src/synth.ts` makes the tone for each frequency one time and
-keeps it in memory.
+A mapping turns this number into a position in a musical scale. The scales use five or six notes per octave.
 
-The option `minIntervalMs` sets the minimum time between two blips. A fast stream loses blips and
-does not become a mass of sound.
+A pentatonic scale avoids many close semitone steps. Modal resonances add inharmonic partials, so simultaneous blips can have tension.
+
+The modal synthesizer combines several resonant modes for each material. It adds a short filtered-noise attack.
+
+The synthesizer renders each sound as mono PCM. It keeps rendered sounds in memory. The `afplay` backend also writes each sound to a WAV file cache.
+
+## Modal synthesis
+
+Each stream selects a material and a touch. Material names evoke familiar objects, but they do not model physical materials. Touch settings change the attack, upper modes, and attack noise.
+
+| Material | Character |
+|---|---|
+| `wood` | Few modes with a short decay. |
+| `ceramic` | Bright modes with slight inharmonic spacing. |
+| `glass` | Bright upper modes with a long decay. |
+
+| Touch | Character |
+|---|---|
+| `soft` | Slow attack, lower upper modes, and quiet noise. |
+| `normal` | Medium attack, balanced upper modes, and noise. |
+| `firm` | Fast attack, stronger upper modes, and more noise. |
+
+The default uses `ceramic` and `normal` for `text`, `wood` and `soft` for `thinking`, and `glass` and `soft` for `tool`. The settings are deterministic and do not vary between triggers.
+
+The cache key includes the exact frequency, duration, material, touch, and a sound version. Volume is applied during playback, so it is not part of the key.
+
+Old cache files remain in `$TMPDIR/omp-blips`. New sound keys prevent reuse of old fixed-synth files.
+
+The `minIntervalMs` option sets the minimum time between two blips. A fast stream loses blips and does not become a mass of sound.
 
 ## Presets
 
@@ -39,7 +64,7 @@ presets. The default preset has the name `default`.
 |---|---|
 | `default` | A melody for the text, a dark murmur for the reasoning, bright ticks for the tools. |
 | `arcade` | Fast small tones in a high range. A text crawl from a 1988 video game. |
-| `gamelan` | Struck metal. The long tones continue and mix into a haze. |
+| `gamelan` | Struck ceramic and glass. The long tones continue and mix into a haze. |
 | `sonar` | A submarine. One slow low ping after each few words. |
 | `typewriter` | Mechanical keys. The pitch changes very little, so you hear rhythm. |
 | `music-box` | A wind-up music box. High, sweet, and in small steps. |
@@ -63,20 +88,20 @@ ends. To see the list of names, run `/blips presets`.
 
 These values are the values of the preset `default`. Another preset gives other values.
 
-| Stream | Lowest pitch | Range | Scale | Mapping | Sound |
-|---|---|---|---|---|---|
-| `text` | 220 Hz | 3 octaves | major pentatonic | `wrap` | the melody that you follow |
-| `thinking` | 147 Hz | 2 octaves | minor pentatonic | `fold` | a dark murmur below the text |
-| `tool` | 523 Hz | 2 octaves | major pentatonic | `wrap` | short bright ticks |
+| Stream | Lowest pitch | Range | Scale | Mapping | Material | Touch | Sound |
+|---|---|---|---|---|---|---|---|
+| `text` | 220 Hz | 3 octaves | major pentatonic | `wrap` | ceramic | normal | the melody that you follow |
+| `thinking` | 147 Hz | 2 octaves | minor pentatonic | `fold` | wood | soft | a dark murmur below the text |
+| `tool` | 523 Hz | 2 octaves | major pentatonic | `wrap` | glass | soft | short bright ticks |
 
 The `tool` voice makes fewer blips than the other two voices. Tool arguments are JSON and contain
 many characters.
 
 ## Scales
 
-The file `src/scales.ts` holds the scales. Each scale has five or six notes in one octave. Two
-notes that are one semitone apart are not in the same scale. As a result, two blips are never
-dissonant.
+The file `src/scales.ts` holds the scales. Each scale has five or six notes in one octave.
+
+Pentatonic scales avoid many close semitone steps. Modal partials can still add inharmonic intervals.
 
 | Scale | Sound |
 |---|---|
@@ -181,7 +206,7 @@ preset, then the first file, then the second file. A file gives only the keys th
   "backend": "ffplay",
   "minIntervalMs": 70,
   "voices": {
-    "thinking": { "charsPerBlip": 3, "volume": 0.4, "mapping": "fold" },
+    "thinking": { "charsPerBlip": 3, "volume": 0.4, "material": "wood", "touch": "soft", "mapping": "fold" },
     "tool": { "enabled": false }
   }
 }
@@ -203,12 +228,14 @@ Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts thes
 | `charsPerBlip` | integer | The number of characters for one blip. |
 | `toneMs` | number | The length of one tone in milliseconds. |
 | `volume` | number from 0 to 1 | The loudness of this voice. |
+| `material` | `"wood"`, `"ceramic"`, or `"glass"` | The resonant material. |
+| `touch` | `"soft"`, `"normal"`, or `"firm"` | The attack and upper-mode strength. |
 | `baseFrequency` | number | The frequency in Hz of the lowest position in the scale. |
 | `scale` | array of numbers | The semitone positions of one octave of the scale. |
 | `octaves` | integer | The number of octaves for the range of characters. |
 | `mapping` | `"wrap"` or `"fold"` | The mapping from a character to a position in the scale. |
 
-The file `blips.example.json` shows all keys with their default values.
+The file `blips.example.json` shows material and touch keys with example values.
 
 ### Errors in a configuration file
 
@@ -226,11 +253,18 @@ before stay in use. The extension never stops the session because of a configura
 | `mise run demo` | Plays a text through the pitch code and the backend. |
 | `mise run audition` | Plays the same text through every preset. |
 
-The demo command accepts five arguments: the text, the voice, the backend, the mapping, and the
-preset. Each argument after the text is optional.
+The demo command accepts seven arguments: the text, the voice, the backend, the mapping, the preset, the material, and the touch. Each argument after the text is optional.
 
 ```sh
-mise run demo -- "the quick brown fox" text ffplay fold gamelan
+mise run demo -- "the quick brown fox" text ffplay fold gamelan glass normal
+```
+
+Compare materials with the same phrase, mapping, and touch:
+
+```sh
+mise run demo -- "no one opposes open protocols" text ffplay fold default wood normal
+mise run demo -- "no one opposes open protocols" text ffplay fold default ceramic normal
+mise run demo -- "no one opposes open protocols" text ffplay fold default glass normal
 ```
 
 The demo reads the same configuration files as the extension. As a result, the demo sounds like the
