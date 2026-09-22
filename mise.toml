@@ -1,0 +1,22 @@
+[tools]
+bun = "latest"
+
+[tasks.typecheck]
+description = "Type-check the extension"
+run = "bun run tsc --noEmit"
+
+[tasks.demo]
+description = "Play a phrase through the blip pipeline"
+run = "bun run scripts/demo.ts"
+
+[tasks.link]
+description = "Symlink this repo into the omp user extensions directory"
+run = """
+mkdir -p ~/.omp/agent/extensions
+ln -sfn {{config_root}} ~/.omp/agent/extensions/omp-blips
+echo "linked -> ~/.omp/agent/extensions/omp-blips"
+"""
+
+[tasks.unlink]
+description = "Remove the omp extension symlink"
+run = "rm -f ~/.omp/agent/extensions/omp-blips"

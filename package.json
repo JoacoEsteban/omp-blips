@@ -1,0 +1,22 @@
+{
+  "name": "omp-blips",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "omp extension that plays a pitched blip while the assistant streams text",
+  "omp": {
+    "extensions": ["./src/index.ts"]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "demo": "bun run scripts/demo.ts"
+  },
+  "dependencies": {
+    "ts-pattern": "^5.9.0"
+  },
+  "devDependencies": {
+    "@oh-my-pi/pi-coding-agent": "^18.2.8",
+    "@types/bun": "^1.4.2",
+    "typescript": "^5.9.3"
+  }
+}
