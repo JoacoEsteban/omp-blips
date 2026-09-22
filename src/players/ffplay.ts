@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process"
-import type { BlipConfig } from "../config.ts"
 import { SAMPLE_RATE, toInt16, voice } from "../synth.ts"
-import type { Player } from "./types.ts"
+import type { Player, Tone } from "./types.ts"
 
 /** How often the mixer wakes up to top up the pipe. */
 const TICK_MS = 10
@@ -11,6 +10,11 @@ const LEAD_MS = 40
 const IDLE_MS = 20_000
 /** Simultaneous tones in the mix. */
 const MAX_VOICES = 8
+
+/** Samples of write-ahead the mixer maintains. */
+const LEAD_FRAMES = Math.round((LEAD_MS * SAMPLE_RATE) / 1000)
+/** Largest block written in one tick; anything beyond this was starved, not buffered. */
+const MAX_BLOCK_FRAMES = LEAD_FRAMES + Math.round((TICK_MS * SAMPLE_RATE) / 1000)
 
 const FFPLAY_ARGS = [
   "-hide_banner",
@@ -38,6 +42,7 @@ const FFPLAY_ARGS = [
 
 interface ActiveVoice {
   readonly samples: Float32Array
+  readonly gain: number
   offset: number
 }
 
@@ -47,10 +52,10 @@ interface ActiveVoice {
  * of waiting for a process spawn, and overlapping tones are summed into one
  * buffer rather than racing separate processes.
  */
-export const createFfplayPlayer = (config: BlipConfig): Player => {
+export const createFfplayPlayer = (): Player => {
   const active: ActiveVoice[] = []
   let child: ChildProcess | undefined
-  let ticker: ReturnType<typeof setInterval> | undefined
+  let ticker: NodeJS.Timeout | undefined
   let startedAt = 0
   let cursor = 0
   let lastVoiceAt = 0
@@ -64,6 +69,16 @@ export const createFfplayPlayer = (config: BlipConfig): Player => {
     child = undefined
   }
 
+  /** Advance every voice by `frames` samples, retiring the ones that ran out. */
+  const advance = (frames: number): void => {
+    for (let i = active.length - 1; i >= 0; i -= 1) {
+      const v = active[i]
+      if (v === undefined) continue
+      v.offset += frames
+      if (v.offset >= v.samples.length) active.splice(i, 1)
+    }
+  }
+
   /** Mix `frames` samples from the active voices into little-endian PCM. */
   const mix = (frames: number): Buffer => {
     const block = Buffer.alloc(frames * 2)
@@ -72,18 +87,12 @@ export const createFfplayPlayer = (config: BlipConfig): Player => {
       let sum = 0
       for (const v of active) {
         const sample = v.samples[v.offset + i]
-        if (sample !== undefined) sum += sample
+        if (sample !== undefined) sum += sample * v.gain
       }
-      block.writeInt16LE(toInt16(sum * config.volume), i * 2)
+      block.writeInt16LE(toInt16(sum), i * 2)
     }
 
-    for (let i = active.length - 1; i >= 0; i -= 1) {
-      const v = active[i]
-      if (v === undefined) continue
-      v.offset += frames
-      if (v.offset >= v.samples.length) active.splice(i, 1)
-    }
-
+    advance(frames)
     return block
   }
 
@@ -94,12 +103,19 @@ export const createFfplayPlayer = (config: BlipConfig): Player => {
       return
     }
 
-    const target = Math.floor(((now - startedAt) * SAMPLE_RATE) / 1000) + (LEAD_MS * SAMPLE_RATE) / 1000
+    const target = Math.floor(((now - startedAt) * SAMPLE_RATE) / 1000) + LEAD_FRAMES
     const frames = Math.floor(target - cursor)
     if (frames <= 0) return
-
     cursor += frames
-    child?.stdin?.write(mix(frames))
+
+    // The pipe drops nothing, so a stalled event loop would otherwise push every
+    // later blip back by the stall and never recover. Skip the starved span
+    // instead: the voices age as if it had played, so audio stays in sync with
+    // the text at the cost of a gap.
+    const starved = frames - MAX_BLOCK_FRAMES
+    if (starved > 0) advance(starved)
+
+    child?.stdin?.write(mix(Math.min(frames, MAX_BLOCK_FRAMES)))
   }
 
   const start = (): void => {
@@ -123,11 +139,11 @@ export const createFfplayPlayer = (config: BlipConfig): Player => {
     ticker.unref?.()
   }
 
-  const play = (frequency: number): void => {
+  const play = ({ frequency, toneMs, volume }: Tone): void => {
     if (child === undefined) start()
     lastVoiceAt = performance.now()
     if (active.length >= MAX_VOICES) return
-    active.push({ samples: voice(frequency, config.toneMs), offset: 0 })
+    active.push({ samples: voice(frequency, toneMs), gain: volume, offset: 0 })
   }
 
   return { play, dispose: stop }

@@ -1,5 +1,5 @@
 import { match, P } from "ts-pattern"
-import type { BlipConfig } from "./config.ts"
+import type { VoiceConfig } from "./config.ts"
 
 const CODE_a = 97
 const CODE_z = 122
@@ -22,7 +22,7 @@ const degreeFromCharacter = (char: string): number | undefined =>
 /** Frequency in Hz for a character, or `undefined` when the character is silent. */
 export const pitchFromCharacter = (
   char: string,
-  { baseFrequency, scale, octaves }: BlipConfig,
+  { baseFrequency, scale, octaves }: VoiceConfig,
 ): number | undefined =>
   match(degreeFromCharacter(char))
     .with(P.number, (degree) => {

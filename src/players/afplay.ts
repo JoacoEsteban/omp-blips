@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process"
-import type { BlipConfig } from "../config.ts"
 import { toneFile } from "../tone.ts"
-import type { Player } from "./types.ts"
+import type { Player, Tone } from "./types.ts"
 
 /** Above this, audio is lagging behind the stream; drop instead of queueing. */
 const MAX_CONCURRENT = 6
@@ -11,17 +10,15 @@ const MAX_CONCURRENT = 6
  * beyond macOS itself; the cost is a process spawn (~50 ms) before each tone
  * is audible, and overlapping tones are racing processes rather than a mix.
  */
-export const createAfplayPlayer = (config: BlipConfig): Player => {
+export const createAfplayPlayer = (): Player => {
   const live = new Set<ChildProcess>()
 
-  const play = (frequency: number): void => {
+  const play = ({ frequency, toneMs, volume }: Tone): void => {
     if (live.size >= MAX_CONCURRENT) return
 
-    const child = spawn(
-      "afplay",
-      ["-v", config.volume.toFixed(3), toneFile(frequency, config.toneMs)],
-      { stdio: "ignore" },
-    )
+    const child = spawn("afplay", ["-v", volume.toFixed(3), toneFile(frequency, toneMs)], {
+      stdio: "ignore",
+    })
     live.add(child)
     child.on("error", () => live.delete(child))
     child.on("exit", () => live.delete(child))

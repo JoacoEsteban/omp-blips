@@ -6,14 +6,25 @@ with the pitch derived from the character itself.
 
 ## How it works
 
-- `message_update` carries an `assistantMessageEvent`; only `text_delta` (and optionally
-  `thinking_delta`) contribute characters.
+- `message_update` carries an `assistantMessageEvent`. Three of its variants stream characters and
+  each gets its own voice: `text_delta` (prose), `thinking_delta` (reasoning), `toolcall_delta`
+  (tool arguments as the model builds them — including file edits).
 - Every `charsPerBlip`-th character is mapped to a scale degree (`src/pitch.ts`): letters ascend
   alphabetically, digits continue above them, everything else is silent so the rhythm follows words.
-- The degree is resolved against a major pentatonic scale spread over N octaves, so any text stays
+- The degree is resolved against a pentatonic scale spread over N octaves, so any text stays
   consonant.
 - Tones are synthesized once per frequency (`src/synth.ts`) and handed to a playback backend.
 - A rate limit (`minIntervalMs`) keeps fast streams from stacking tones.
+
+## Voices
+
+| Stream | Register | Scale | Character |
+|---|---|---|---|
+| `text` | 220 Hz, 3 octaves | major pentatonic | the melody you follow |
+| `thinking` | 147 Hz, 2 octaves | minor pentatonic | a darker murmur below the prose |
+| `tool` | 523 Hz, 2 octaves | major pentatonic | short bright ticks, sparser (dense JSON) |
+
+Per-voice `enabled`, `charsPerBlip`, `toneMs` and `volume` live in `src/config.ts`.
 
 ## Backends
 
@@ -22,8 +33,10 @@ Set `backend` in `src/config.ts`.
 - **`ffplay`** (default, `src/players/ffplay.ts`) — one long-lived `ffplay` reading raw PCM from
   stdin. A 10 ms mixer tick writes a continuous real-time stream, 40 ms ahead of the wall clock, so
   a tone starts on the next tick instead of waiting for a process spawn, and overlapping tones are
-  summed into one buffer instead of racing processes. The sink shuts down after 20 s of silence and
-  respawns on the next blip. Needs `ffmpeg` installed.
+  summed into one buffer instead of racing processes. A pipe drops nothing, so a stalled event loop
+  would push every later blip back forever; the mixer instead skips the starved span — voices age as
+  if it had played — trading a gap for staying in sync with the text. The sink shuts down after 20 s
+  of silence and respawns on the next blip. Needs `ffmpeg` installed.
 - **`afplay`** (`src/players/afplay.ts`) — macOS built-in, one short-lived process per tone against
   a cached WAV in `$TMPDIR/omp-blips`. Zero dependencies, ~50 ms spawn latency, capped at 6
   concurrent processes.
@@ -34,19 +47,20 @@ Set `backend` in `src/config.ts`.
 mise run link      # symlinks the repo into ~/.omp/agent/extensions/omp-blips
 ```
 
-Restart `omp`. Use `/blips`, `/blips on`, `/blips off` to toggle it at runtime.
+Restart `omp`. `/blips` toggles everything; `/blips on|off` forces it; `/blips text`,
+`/blips thinking`, `/blips tool` toggle one voice.
 
 ## Development
 
 ```sh
 mise run typecheck
-mise run demo -- "the quick brown fox" ffplay   # real pipeline, backend of your choice
+mise run demo -- "the quick brown fox" text ffplay   # phrase, voice, backend
 ```
 
 ## Tuning
 
-All knobs live in `src/config.ts`: `backend`, `charsPerBlip`, `minIntervalMs`, `toneMs`, `volume`,
-`baseFrequency`, `scale`, `octaves`, `thinking`.
+Global knobs in `src/config.ts`: `backend`, `minIntervalMs`. Per-voice knobs under `voices`:
+`enabled`, `charsPerBlip`, `toneMs`, `volume`, `baseFrequency`, `scale`, `octaves`.
 
 ## Platform
 
