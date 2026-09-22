@@ -18,7 +18,7 @@ const voiceSchema = z
 		charsPerBlip: z.number().int().positive(),
 		toneMs: z.number().positive(),
 		volume: z.number().min(0).max(1),
-		material: z.enum(["wood", "ceramic", "glass"]),
+		material: z.enum(["wood", "stone", "ceramic", "glass"]),
 		touch: z.enum(["soft", "normal", "firm"]),
 		baseFrequency: z.number().positive(),
 		scale: z.array(z.number()).nonempty(),

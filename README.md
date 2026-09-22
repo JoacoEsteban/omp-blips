@@ -38,6 +38,7 @@ Each stream selects a material and a touch. Material names evoke familiar object
 | Material | Character |
 |---|---|
 | `wood` | Few modes with a short decay. |
+| `stone` | Dry low modes with sparse inharmonic upper resonances. |
 | `ceramic` | Bright modes with slight inharmonic spacing. |
 | `glass` | Bright upper modes with a long decay. |
 
@@ -228,7 +229,7 @@ Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts thes
 | `charsPerBlip` | integer | The number of characters for one blip. |
 | `toneMs` | number | The length of one tone in milliseconds. |
 | `volume` | number from 0 to 1 | The loudness of this voice. |
-| `material` | `"wood"`, `"ceramic"`, or `"glass"` | The resonant material. |
+| `material` | `"wood"`, `"stone"`, `"ceramic"`, or `"glass"` | The resonant material. |
 | `touch` | `"soft"`, `"normal"`, or `"firm"` | The attack and upper-mode strength. |
 | `baseFrequency` | number | The frequency in Hz of the lowest position in the scale. |
 | `scale` | array of numbers | The semitone positions of one octave of the scale. |

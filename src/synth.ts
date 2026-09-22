@@ -8,7 +8,7 @@ const SOUND_VERSION = "modal-v1"
 /** The maximum modal sum with firm excitation and attack noise stays below 1 / this gain. */
 const ANALYTICAL_NORMALIZE = 0.55
 
-export type Material = "wood" | "ceramic" | "glass"
+export type Material = "wood" | "stone" | "ceramic" | "glass"
 export type Touch = "soft" | "normal" | "firm"
 
 export interface Sound {
@@ -35,6 +35,11 @@ const MATERIAL_MODES: Readonly<Record<Material, readonly ResonanceMode[]>> = {
 		{ ratio: 1, gain: 0.9, decay: 4.5 },
 		{ ratio: 1.99, gain: 0.18, decay: 8 },
 		{ ratio: 3.01, gain: 0.08, decay: 11 },
+	],
+	stone: [
+		{ ratio: 1, gain: 0.84, decay: 5.4 },
+		{ ratio: 2.67, gain: 0.22, decay: 7.6 },
+		{ ratio: 4.45, gain: 0.1, decay: 10.2 },
 	],
 	ceramic: [
 		{ ratio: 1, gain: 0.72, decay: 3.4 },
