@@ -30,6 +30,7 @@ export const playText = async (
 			player.play({
 				frequency,
 				toneMs: voice.toneMs,
+				decay: voice.decay,
 				material: voice.material,
 				touch: voice.touch,
 				volume: voice.volume,

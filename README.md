@@ -232,6 +232,7 @@ Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts thes
 | `enabled` | boolean | Starts this voice at the start of a session. |
 | `charsPerBlip` | integer | The number of characters for one blip. |
 | `toneMs` | number | The length of one tone in milliseconds. |
+| `decay` | positive number | Multiplies the material's decay rate. Lower values ring longer. |
 | `volume` | number from 0 to 1 | The loudness of this voice. |
 | `material` | `"wood"`, `"stone"`, `"ceramic"`, or `"glass"` | The resonant material. |
 | `touch` | `"soft"`, `"normal"`, or `"firm"` | The attack and upper-mode strength. |

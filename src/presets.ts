@@ -124,7 +124,8 @@ export const presets: Record<PresetName, Preset> = {
 			voices: {
 				text: {
 					charsPerBlip: 14,
-					toneMs: 320,
+					toneMs: 680,
+					decay: 0.25,
 					volume: 0.34,
 					material: "glass",
 					touch: "soft",
@@ -135,7 +136,8 @@ export const presets: Record<PresetName, Preset> = {
 				},
 				thinking: {
 					charsPerBlip: 18,
-					toneMs: 440,
+					toneMs: 840,
+					decay: 0.25,
 					volume: 0.3,
 					material: "glass",
 					touch: "soft",
@@ -146,7 +148,8 @@ export const presets: Record<PresetName, Preset> = {
 				},
 				tool: {
 					charsPerBlip: 20,
-					toneMs: 220,
+					toneMs: 520,
+					decay: 0.3,
 					volume: 0.24,
 					material: "glass",
 					touch: "soft",

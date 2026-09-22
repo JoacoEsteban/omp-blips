@@ -414,6 +414,7 @@ const createLabApp = (player: AuditionPlayer, initialConfig: BlipConfig): App<Mo
 				const play = playCmd(player, {
 					frequency,
 					toneMs: voice.toneMs,
+					decay: voice.decay,
 					material: voice.material,
 					touch: voice.touch,
 					volume: voice.volume,

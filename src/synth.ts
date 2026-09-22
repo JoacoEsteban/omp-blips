@@ -14,6 +14,8 @@ export type Touch = "soft" | "normal" | "firm"
 export interface Sound {
 	readonly frequency: number
 	readonly toneMs: number
+	/** Multiplier for the material decay rate; lower values sustain longer. */
+	readonly decay: number
 	readonly material: Material
 	readonly touch: Touch
 }
@@ -86,7 +88,7 @@ const renderVoice = (sound: Sound): Float32Array => {
 				phase: 0,
 				phaseStep: (2 * Math.PI * mode.ratio * frequency) / SAMPLE_RATE,
 				gain: mode.gain * excitation,
-				decayStep: Math.exp(-mode.decay / Math.max(1, frames - 1)),
+				decayStep: Math.exp(-(mode.decay * sound.decay) / Math.max(1, frames - 1)),
 				decay: 1,
 			}
 		})
@@ -130,7 +132,7 @@ const renderVoice = (sound: Sound): Float32Array => {
 }
 
 export const soundKey = (sound: Sound): string =>
-	`${SOUND_VERSION}:${String(sound.frequency)}:${String(sound.toneMs)}:${sound.material}:${sound.touch}`
+	`${SOUND_VERSION}:${String(sound.frequency)}:${String(sound.toneMs)}:${String(sound.decay)}:${sound.material}:${sound.touch}`
 
 /** Cached voice for a complete sound identity. */
 export const voice = (sound: Sound): Float32Array => {

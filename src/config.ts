@@ -19,6 +19,8 @@ export interface VoiceConfig {
  readonly charsPerBlip: number
  /** Length of a single tone, in milliseconds. */
  readonly toneMs: number
+ /** Multiplier for the material's modal decay rate; lower values ring longer. */
+ readonly decay: number
  /** Output gain, 0..1. */
  readonly volume: number
  /** Modal material for this stream. */
@@ -64,6 +66,7 @@ export const defaultConfig: BlipConfig = {
    enabled: true,
    charsPerBlip: 3,
    toneMs: 55,
+   decay: 1,
    volume: 0.35,
    material: "ceramic",
    touch: "normal",
@@ -78,6 +81,7 @@ export const defaultConfig: BlipConfig = {
    enabled: true,
    charsPerBlip: 4,
    toneMs: 90,
+   decay: 1,
    volume: 0.32,
    material: "wood",
    touch: "soft",
@@ -91,6 +95,7 @@ export const defaultConfig: BlipConfig = {
    enabled: true,
    charsPerBlip: 6,
    toneMs: 26,
+   decay: 1,
    volume: 0.22,
    material: "glass",
    touch: "soft",
