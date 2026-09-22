@@ -11,24 +11,25 @@ const MAX_CONCURRENT = 6
  * is audible, and overlapping tones are racing processes rather than a mix.
  */
 export const createAfplayPlayer = (): Player => {
-  const live = new Set<ChildProcess>()
+ const live = new Set<ChildProcess>()
 
-  const play = (tone: Tone): void => {
-    if (live.size >= MAX_CONCURRENT) return
+ const play = (tone: Tone): void => {
+  if (live.size >= MAX_CONCURRENT) return
 
-    const child = spawn("afplay", ["-v", tone.volume.toFixed(3), toneFile(tone)], {
-      stdio: "ignore",
-    })
-    live.add(child)
-    child.on("error", () => live.delete(child))
-    child.on("exit", () => live.delete(child))
-    child.unref()
-  }
+  const child = spawn("afplay", ["-v", tone.volume.toFixed(3), toneFile(tone)], {
+   stdio: "ignore",
+  })
+  live.add(child)
+  child.on("error", () => live.delete(child))
+  child.on("exit", () => live.delete(child))
+  child.unref()
+ }
 
-  const dispose = (): void => {
-    for (const child of live) child.kill("SIGKILL")
-    live.clear()
-  }
+ /** Nothing to fade: an `afplay` process is either running or killed. */
+ const silence = (): void => {
+  for (const child of live) child.kill("SIGKILL")
+  live.clear()
+ }
 
-  return { play, dispose }
+ return { play, flush: silence, dispose: silence }
 }

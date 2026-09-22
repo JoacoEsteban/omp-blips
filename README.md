@@ -59,6 +59,15 @@ The `minIntervalMs` option sets the minimum time between two blips of the same v
 loses blips and does not become a mass of sound. Each voice has its own floor, so a long block of
 reasoning does not take the blips of the answer text.
 
+## Interruption
+
+If you stop the agent, the stream ends before the text is complete. The extension then stops the
+blips that still sound. It does not let them ring for text that does not come.
+
+The extension finds this condition in two places. The stream sends a terminal `error` event, and the
+message ends with the stop reason `aborted` or `error`. Each of the two makes the same stop. A
+provider failure has the same effect as a manual stop.
+
 ## Presets
 
 A preset is a complete set of values for the three voices. The file `src/presets.ts` holds the
@@ -162,6 +171,9 @@ synchronous with the text, but there is a short gap.
 
 After 20 s without a blip, the extension stops the process. The next blip starts a new process.
 
+A stop decreases the sound to zero in 6 ms. A tone that stops in one step makes a click. Up to 40 ms
+of audio is already in the pipe and stays there, so the silence starts a moment after the stop.
+
 ### afplay
 
 `afplay` is part of macOS. The code is in `src/players/afplay.ts`. This backend needs no
@@ -170,6 +182,9 @@ installation.
 The extension starts one short process for each blip. It plays a WAV file from the cache directory
 `$TMPDIR/omp-blips`. A new process needs approximately 50 ms before the sound starts. A maximum of
 6 processes can play at the same time.
+
+A stop kills the processes that play. `afplay` gives no control of the volume during play, so the
+sound stops in one step.
 
 ## Install
 

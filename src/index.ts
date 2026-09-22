@@ -1,4 +1,4 @@
-import type { ExtensionAPI, MessageUpdateEvent } from "@oh-my-pi/pi-coding-agent"
+import type { ExtensionAPI, MessageEndEvent, MessageUpdateEvent } from "@oh-my-pi/pi-coding-agent"
 import { match, P } from "ts-pattern"
 import { defaultConfig, type BlipConfig, type StreamKind } from "./config.ts"
 import { pitchFromCharacter } from "./pitch.ts"
@@ -29,6 +29,21 @@ const chunkOf = (event: MessageUpdateEvent["assistantMessageEvent"]): Chunk | un
 			delta,
 		}))
 		.otherwise(() => undefined)
+
+/**
+ * A user abort or a provider failure ends the stream mid-sentence. It arrives
+ * as the terminal `error` event while streaming.
+ */
+const isInterrupt = (event: MessageUpdateEvent["assistantMessageEvent"]): boolean =>
+	match(event)
+		.with({ type: "error" }, () => true)
+		.otherwise(() => false)
+
+/** The same interruption seen from the finished message, in case no `error` event arrived. */
+const stoppedEarly = (message: MessageEndEvent["message"]): boolean =>
+	match(message)
+		.with({ role: "assistant", stopReason: P.union("aborted", "error") }, () => true)
+		.otherwise(() => false)
 
 /**
  * Structural stand-in for pi-tui's `AutocompleteItem`: the TUI package is only a
@@ -140,6 +155,9 @@ export default function blips(pi: ExtensionAPI): void {
 	}
 	const pending: Record<StreamKind, number> = { text: 0, thinking: 0, tool: 0 }
 	const isEnabled = (kind: StreamKind): boolean => override[kind] ?? config.voices[kind].enabled
+	const clearPending = (): void => {
+		for (const kind of KINDS) pending[kind] = 0
+	}
 
 	let chosen: PresetName | undefined
 
@@ -169,6 +187,14 @@ export default function blips(pi: ExtensionAPI): void {
 	})
 
 	pi.on("message_update", async (event) => {
+		// An interrupted stream leaves blips ringing for text that is no longer
+		// coming, and a half-spent budget for the next one.
+		if (isInterrupt(event.assistantMessageEvent)) {
+			player.flush()
+			clearPending()
+			return
+		}
+
 		const chunk = chunkOf(event.assistantMessageEvent)
 		if (chunk === undefined || !isEnabled(chunk.kind)) return
 
@@ -194,8 +220,9 @@ export default function blips(pi: ExtensionAPI): void {
 		}
 	})
 
-	pi.on("message_end", async () => {
-		for (const kind of KINDS) pending[kind] = 0
+	pi.on("message_end", async (event) => {
+		if (stoppedEarly(event.message)) player.flush()
+		clearPending()
 	})
 
 	pi.on("session_shutdown", async () => {

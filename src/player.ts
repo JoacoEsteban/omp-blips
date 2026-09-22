@@ -9,6 +9,8 @@ export type { Player, Tone } from "./players/types.ts"
 /** A player that knows which voice a tone belongs to, so it can pace each one separately. */
 export interface VoicedPlayer {
 	readonly play: (kind: StreamKind, tone: Tone) => void
+	/** Silence whatever is sounding now, but stay ready for the next tone. */
+	readonly flush: () => void
 	readonly dispose: () => void
 }
 
@@ -39,5 +41,5 @@ export const createPlayer = (config: BlipConfig): VoicedPlayer => {
 		player.play(tone)
 	}
 
-	return { play, dispose: player.dispose }
+	return { play, flush: player.flush, dispose: player.dispose }
 }

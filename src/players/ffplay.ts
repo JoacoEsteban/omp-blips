@@ -10,11 +10,15 @@ const LEAD_MS = 40
 const IDLE_MS = 20_000
 /** Simultaneous tones in the mix. */
 const MAX_VOICES = 8
+/** Ramp to silence over this long on a flush; cutting a ringing voice dead clicks. */
+const FADE_MS = 6
 
 /** Samples of write-ahead the mixer maintains. */
 const LEAD_FRAMES = Math.round((LEAD_MS * SAMPLE_RATE) / 1000)
 /** Largest block written in one tick; anything beyond this was starved, not buffered. */
 const MAX_BLOCK_FRAMES = LEAD_FRAMES + Math.round((TICK_MS * SAMPLE_RATE) / 1000)
+/** Samples the flush ramp takes to reach zero. */
+const FADE_FRAMES = Math.max(1, Math.round((FADE_MS * SAMPLE_RATE) / 1000))
 
 const FFPLAY_ARGS = [
  "-hide_banner",
@@ -64,11 +68,14 @@ export const createFfplayPlayer = ({ idleMs = IDLE_MS }: FfplayPlayerOptions = {
  let startedAt = 0
  let cursor = 0
  let lastVoiceAt = 0
+ /** Samples left in an in-progress flush ramp; 0 when no flush is pending. */
+ let fadeFrames = 0
 
  const stop = (): void => {
   if (ticker !== undefined) clearInterval(ticker)
   ticker = undefined
   active.length = 0
+  fadeFrames = 0
   child?.stdin?.end()
   child?.kill("SIGTERM")
   child = undefined
@@ -88,12 +95,21 @@ export const createFfplayPlayer = ({ idleMs = IDLE_MS }: FfplayPlayerOptions = {
  const mix = (frames: number): Buffer => {
   const block = Buffer.alloc(frames * 2)
 
-  for (let i = 0; i < frames; i += 1) {
+  // Once the ramp retires the voices there is nothing left to sum, and the
+  // rest of the block stays at the zeros `alloc` already wrote.
+  for (let i = 0; i < frames && active.length > 0; i += 1) {
    let sum = 0
    for (const v of active) {
     const sample = v.samples[v.offset + i]
     if (sample !== undefined) sum += sample * v.gain
    }
+
+   if (fadeFrames > 0) {
+    fadeFrames -= 1
+    sum *= fadeFrames / FADE_FRAMES
+    if (fadeFrames === 0) active.length = 0
+   }
+
    block.writeInt16LE(toInt16(sum), i * 2)
   }
 
@@ -147,9 +163,24 @@ export const createFfplayPlayer = ({ idleMs = IDLE_MS }: FfplayPlayerOptions = {
  const play = (tone: Tone): void => {
   if (child === undefined) start()
   lastVoiceAt = performance.now()
+  // A blip arriving mid-ramp means the stream is live again: drop what was
+  // fading rather than let the ramp swallow the new voice too.
+  if (fadeFrames > 0) {
+   active.length = 0
+   fadeFrames = 0
+  }
   if (active.length >= MAX_VOICES) return
   active.push({ samples: voice(tone), gain: tone.volume, offset: 0 })
  }
 
- return { play, dispose: stop }
+ /**
+  * Ramp the active voices to silence and keep the process. Up to `LEAD_MS` of
+  * audio is already in the pipe and past recall, so the silence lands that
+  * much after the call.
+  */
+ const flush = (): void => {
+  if (active.length > 0) fadeFrames = FADE_FRAMES
+ }
+
+ return { play, flush, dispose: stop }
 }
