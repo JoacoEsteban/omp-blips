@@ -13,13 +13,23 @@ import {
 import { type PresetName, PRESET_NAMES, presets } from './presets.ts'
 
 const readingSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('alphabet') }),
+  z.strictObject({
+    kind: z.literal('alphabet'),
+    every: z.number().int().positive()
+  }),
   z.strictObject({
     kind: z.literal('codepoint'),
-    span: z.number().int().positive()
+    span: z.number().int().positive(),
+    every: z.number().int().positive()
   }),
-  z.strictObject({ kind: z.literal('class') }),
-  z.strictObject({ kind: z.literal('vowels') }),
+  z.strictObject({
+    kind: z.literal('class'),
+    every: z.number().int().positive()
+  }),
+  z.strictObject({
+    kind: z.literal('vowels'),
+    every: z.number().int().positive()
+  }),
   z.strictObject({
     kind: z.literal('phrase'),
     span: z.number().int().positive()
@@ -43,7 +53,6 @@ const pitchSchema = z.discriminatedUnion('kind', [
 const voiceSchema = z
   .object({
     enabled: z.boolean(),
-    charsPerBlip: z.number().int().positive(),
     toneMs: z.number().positive(),
     decay: z.number().positive(),
     volume: z.number().min(0).max(1),
@@ -115,7 +124,6 @@ const mergeVoice = (
   patch: VoicePatch = {}
 ): VoiceConfig => ({
   enabled: patch.enabled ?? base.enabled,
-  charsPerBlip: patch.charsPerBlip ?? base.charsPerBlip,
   toneMs: patch.toneMs ?? base.toneMs,
   decay: patch.decay ?? base.decay,
   volume: patch.volume ?? base.volume,

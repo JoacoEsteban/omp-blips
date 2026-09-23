@@ -14,15 +14,25 @@ const TERMINALS = '.!?'
 const WHITESPACE = /\s/u
 
 /**
- * How a voice interprets characters: which ones are voiced, which ones are
- * silent, and what index a voiced one carries. The index means nothing on its
- * own — `pitch.ts` decides what it sounds like.
+ * How a voice consumes characters: which ones are voiced, which ones are
+ * silent, how many it spends on one blip, and what index a voiced one carries.
+ * The index means nothing on its own — `pitch.ts` decides what it sounds like.
+ *
+ * The rate belongs here and not to the voice. A reading that samples every `n`
+ * sounded characters says so; `phrase` has no such field, because it already
+ * paces itself by the words of the text. A counter outside the reading would
+ * land on an arbitrary character of each word and lose the shape the reading
+ * built.
  */
 export type ReadingConfig =
-  | { readonly kind: 'alphabet' }
-  | { readonly kind: 'codepoint'; readonly span: number }
-  | { readonly kind: 'class' }
-  | { readonly kind: 'vowels' }
+  | { readonly kind: 'alphabet'; readonly every: number }
+  | {
+      readonly kind: 'codepoint'
+      readonly span: number
+      readonly every: number
+    }
+  | { readonly kind: 'class'; readonly every: number }
+  | { readonly kind: 'vowels'; readonly every: number }
   | { readonly kind: 'phrase'; readonly span: number }
 
 /**
@@ -117,55 +127,112 @@ class Vowels extends Memoryless {
 }
 
 /**
- * Words become ascending runs. Whitespace lifts the floor the next run starts
- * from, and a terminal mark drops it back to zero, so you hear word lengths
- * first and sentence boundaries after them. The same word sounds different at
- * different points of a sentence, which is what keeps repeated words alive.
+ * One blip per word, pitched by the floor. The floor climbs at each word
+ * boundary and returns to zero after a terminal mark, so the melody is the
+ * shape of the sentence and the silences are the lengths of the words.
+ *
+ * This is the reading that paces itself. Sampling the characters inside a word
+ * would put the blip at an arbitrary letter, and the sentence would stop being
+ * audible.
  */
 class Phrase implements Reading {
   constructor(
     private readonly span: number,
-    private readonly position: number,
-    private readonly floor: number
+    private readonly floor: number,
+    private readonly inWord: boolean
   ) {}
 
   read(char: string): readonly [Reading, number | undefined] {
     return match(char)
       .when(
         (c) => TERMINALS.includes(c),
-        () => [new Phrase(this.span, 0, 0), undefined] as const
+        () => [new Phrase(this.span, 0, false), undefined] as const
       )
       .when(
         (c) => WHITESPACE.test(c),
         () => [this.parted(), undefined] as const
       )
+      .when(
+        () => this.inWord,
+        () => [this, undefined] as const
+      )
       .otherwise(
-        () =>
-          [
-            new Phrase(this.span, this.position + 1, this.floor),
-            this.floor + this.position
-          ] as const
+        () => [new Phrase(this.span, this.floor, true), this.floor] as const
       )
   }
 
   /**
    * A word boundary lifts the floor once. A run of spaces is still one
    * boundary, and the space after a terminal mark keeps the reset floor, so a
-   * sentence always opens on its lowest run.
+   * sentence always opens on its lowest note.
    */
   private parted(): Phrase {
-    return match(this.position)
-      .with(0, () => new Phrase(this.span, 0, this.floor))
-      .otherwise(() => new Phrase(this.span, 0, (this.floor + 1) % this.span))
+    return match(this.inWord)
+      .with(false, () => new Phrase(this.span, this.floor, false))
+      .with(
+        true,
+        () => new Phrase(this.span, (this.floor + 1) % this.span, false)
+      )
+      .exhaustive()
+  }
+}
+
+/**
+ * Spends `every` sounded characters on one blip. Silent characters cost
+ * nothing, so the rate stays the same in prose and in dense tool arguments.
+ */
+class Sampled implements Reading {
+  constructor(
+    private readonly every: number,
+    private readonly inner: Reading,
+    private readonly spent: number
+  ) {}
+
+  read(char: string): readonly [Reading, number | undefined] {
+    const [inner, index] = this.inner.read(char)
+    return match(index)
+      .with(P.nullish, () => [this.carrying(inner), undefined] as const)
+      .otherwise((sounded) =>
+        match(this.spent + 1 >= this.every)
+          .with(
+            false,
+            () =>
+              [
+                new Sampled(this.every, inner, this.spent + 1),
+                undefined
+              ] as const
+          )
+          .with(
+            true,
+            () => [new Sampled(this.every, inner, 0), sounded] as const
+          )
+          .exhaustive()
+      )
+  }
+
+  private carrying(inner: Reading): Sampled {
+    return new Sampled(this.every, inner, this.spent)
   }
 }
 
 /** The cursor a voice starts from, and returns to whenever its reading changes. */
 export const readingOf = (config: ReadingConfig): Reading =>
   match(config)
-    .with({ kind: 'alphabet' }, () => new Alphabet())
-    .with({ kind: 'codepoint' }, ({ span }) => new Codepoint(span))
-    .with({ kind: 'class' }, () => new CharacterClass())
-    .with({ kind: 'vowels' }, () => new Vowels())
-    .with({ kind: 'phrase' }, ({ span }) => new Phrase(span, 0, 0))
+    .with(
+      { kind: 'alphabet' },
+      ({ every }) => new Sampled(every, new Alphabet(), 0)
+    )
+    .with(
+      { kind: 'codepoint' },
+      ({ span, every }) => new Sampled(every, new Codepoint(span), 0)
+    )
+    .with(
+      { kind: 'class' },
+      ({ every }) => new Sampled(every, new CharacterClass(), 0)
+    )
+    .with(
+      { kind: 'vowels' },
+      ({ every }) => new Sampled(every, new Vowels(), 0)
+    )
+    .with({ kind: 'phrase' }, ({ span }) => new Phrase(span, 0, false))
     .exhaustive()

@@ -5,14 +5,13 @@
   "voices": {
     "text": {
       "enabled": true,
-      "charsPerBlip": 3,
       "toneMs": 55,
       "decay": 1,
       "volume": 0.35,
       "material": "ceramic",
       "touch": "normal",
       "baseFrequency": 220,
-      "reading": { "kind": "alphabet" },
+      "reading": { "kind": "alphabet", "every": 3 },
       "pitch": {
         "kind": "scalar",
         "scale": [0, 2, 4, 7, 9],
@@ -21,7 +20,6 @@
       }
     },
     "thinking": {
-      "charsPerBlip": 4,
       "volume": 0.32,
       "material": "wood",
       "touch": "soft",

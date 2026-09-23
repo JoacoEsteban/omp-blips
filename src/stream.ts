@@ -88,20 +88,17 @@ interface Paced extends Blip {
 }
 
 /**
- * The running count for one voice, plus whatever the last character produced.
- * `cursor` is the reading mid-stream; `source` is the config it came from, so a
- * voice that changes its reading starts a new phrase instead of continuing an
- * old one in a new shape.
+ * What the last character produced, and the reading that continues after it.
+ * `source` is the config the cursor came from, so a voice that changes its
+ * reading starts a new phrase instead of continuing an old one in a new shape.
  */
 interface Count {
-  readonly pending: number
   readonly blip: Paced | undefined
   readonly cursor: Reading | undefined
   readonly source: ReadingConfig | undefined
 }
 
 const SILENT: Count = {
-  pending: 0,
   blip: undefined,
   cursor: undefined,
   source: undefined
@@ -122,9 +119,9 @@ const toneOf = (voice: VoiceConfig, frequency: number): Tone => ({
 })
 
 /**
- * One character against one voice. Silent characters must not spend the budget:
- * counting them would make the effective rate depend on how much punctuation
- * the stream holds.
+ * One character against one voice. The reading decides both what sounds and how
+ * often: it returns an index for a character that earns a blip, and nothing for
+ * a character that does not.
  */
 const strike = (
   count: Count,
@@ -135,24 +132,17 @@ const strike = (
     .with(P.nullish, () => ({ ...count, blip: undefined }))
     .otherwise((voiced) => {
       const [cursor, index] = cursorOf(count, voiced.reading).read(char)
-      const carried = { ...count, cursor, source: voiced.reading }
+      const carried = { cursor, source: voiced.reading }
       return match(index)
         .with(P.nullish, () => ({ ...carried, blip: undefined }))
-        .otherwise((voicedIndex) => {
-          const pending = count.pending + 1
-          return match(pending >= voiced.charsPerBlip)
-            .with(false, () => ({ ...carried, pending, blip: undefined }))
-            .with(true, () => ({
-              ...carried,
-              pending: 0,
-              blip: {
-                char,
-                tone: toneOf(voiced, frequencyOf(voicedIndex, voiced)),
-                paceMs: minIntervalMs
-              }
-            }))
-            .exhaustive()
-        })
+        .otherwise((sounded) => ({
+          ...carried,
+          blip: {
+            char,
+            tone: toneOf(voiced, frequencyOf(sounded, voiced)),
+            paceMs: minIntervalMs
+          }
+        }))
     })
 
 /**

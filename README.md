@@ -16,12 +16,14 @@ The agent sends a `message_update` event for each small part of the answer. Each
 - `toolcall_delta` holds the arguments of a tool call. File content in an edit is part of these
   arguments.
 
-The extension gives each of the three types a different voice. For each voice, one character in
-`charsPerBlip` becomes a blip.
+The extension gives each of the three types a different voice. Each voice has a reading and a
+pitch. The reading consumes the characters and decides which ones make a blip. The pitch turns the
+number from the reading into a frequency.
 
-Each voice has a reading and a pitch. The reading turns a character into a number, or it makes the
-character silent. The pitch turns that number into a frequency. A silent character does not count
-towards `charsPerBlip`, so the rate stays the same in prose and in dense tool arguments.
+The reading also holds the rate. A reading that samples characters has an `every` value: it makes
+one blip for each `every` sounded characters, and a silent character costs nothing. As a result the
+rate stays the same in prose and in dense tool arguments. A reading that follows the structure of
+the text has no `every` value, because the text gives it the rate.
 
 The default reading is `alphabet`: `a` is 0, `z` is 25, and the digits continue above the letters.
 All other characters are silent. Because space and punctuation are silent, the rhythm of the blips
@@ -142,11 +144,11 @@ ends. To see the list of names, run `/blips presets`.
 
 These values are the values of the preset `default`. Another preset gives other values.
 
-| Stream     | Lowest pitch | Reading    | Pitch                                       | Material | Touch  | Sound                        |
-| ---------- | ------------ | ---------- | ------------------------------------------- | -------- | ------ | ---------------------------- |
-| `text`     | 220 Hz       | `alphabet` | scalar, major pentatonic, 3 octaves, `wrap` | ceramic  | normal | the melody that you follow   |
-| `thinking` | 147 Hz       | `alphabet` | scalar, minor pentatonic, 2 octaves, `fold` | wood     | soft   | a dark murmur below the text |
-| `tool`     | 523 Hz       | `alphabet` | scalar, major pentatonic, 2 octaves, `wrap` | glass    | soft   | short bright ticks           |
+| Stream     | Lowest pitch | Reading             | Pitch                                       | Material | Touch  | Sound                        |
+| ---------- | ------------ | ------------------- | ------------------------------------------- | -------- | ------ | ---------------------------- |
+| `text`     | 220 Hz       | `alphabet`, every 3 | scalar, major pentatonic, 3 octaves, `wrap` | ceramic  | normal | the melody that you follow   |
+| `thinking` | 147 Hz       | `alphabet`, every 4 | scalar, minor pentatonic, 2 octaves, `fold` | wood     | soft   | a dark murmur below the text |
+| `tool`     | 523 Hz       | `alphabet`, every 6 | scalar, major pentatonic, 2 octaves, `wrap` | glass    | soft   | short bright ticks           |
 
 The `tool` voice makes fewer blips than the other two voices. Tool arguments are JSON and contain
 many characters.
@@ -156,22 +158,30 @@ voices read phrases, and the `tool` voice plays one pitch for dense JSON.
 
 ## Readings
 
-A reading turns a character into a number, or it makes the character silent. The file
-`src/reading.ts` holds the readings. A reading is a cursor: it reads one character and returns the
-reading that continues after it. A reading with memory keeps its state inside that cursor.
+A reading consumes the characters of a stream. It turns a character into a number, it makes the
+character silent, or it waits for more characters. The file `src/reading.ts` holds the readings. A
+reading is a cursor: it reads one character and returns the reading that continues after it. A
+reading with memory keeps its state inside that cursor.
 
-| Reading     | Behavior                                                                      |
-| ----------- | ----------------------------------------------------------------------------- |
-| `alphabet`  | Letters, then digits. All other characters are silent.                        |
-| `codepoint` | Each visible character, after a division by `span`. Punctuation sounds too.   |
-| `class`     | Four numbers: vowel, consonant, digit, punctuation. Whitespace is silent.     |
-| `vowels`    | Vowels only, by their position in `aeiou`. The text becomes much more sparse. |
-| `phrase`    | Each word goes up in steps. Each word starts higher than the word before it.  |
+Each reading holds its own rate. This is the reason that a voice has no global counter: a counter
+outside the reading lands on an arbitrary character of each word, and the shape that the reading
+builds does not reach your ear.
 
-`phrase` has memory. A space lifts the floor that the next word starts from, and the floor returns
-to zero after a full stop, a question mark or an exclamation mark. As a result, you hear the length
-of each word first and the end of each sentence after it. A word that occurs many times does not
-sound the same each time.
+| Reading     | Behavior                                                                      | Rate         |
+| ----------- | ----------------------------------------------------------------------------- | ------------ |
+| `alphabet`  | Letters, then digits. All other characters are silent.                        | `every`      |
+| `codepoint` | Each visible character, after a division by `span`. Punctuation sounds too.   | `every`      |
+| `class`     | Four numbers: vowel, consonant, digit, punctuation. Whitespace is silent.     | `every`      |
+| `vowels`    | Vowels only, by their position in `aeiou`. The text becomes much more sparse. | `every`      |
+| `phrase`    | One blip for each word. The pitch goes up after each word.                    | one per word |
+
+`every` is a number of sounded characters for one blip. A silent character costs nothing.
+
+`phrase` has memory and no `every` value. It makes one blip at the start of each word. A space
+lifts the floor of the next word, and the floor returns to zero after a full stop, a question mark
+or an exclamation mark. As a result, the melody is the shape of the sentence, and the silence
+between two blips is the length of a word. The words give the rate, and no counter can move the
+blip to a different letter.
 
 A configuration file gives a reading as an object with a `kind`:
 
@@ -320,7 +330,6 @@ preset, then the first file, then the second file. A file gives only the keys th
   "minIntervalMs": 70,
   "voices": {
     "thinking": {
-      "charsPerBlip": 3,
       "volume": 0.4,
       "material": "wood",
       "touch": "soft",
@@ -342,18 +351,17 @@ preset, then the first file, then the second file. A file gives only the keys th
 
 Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts these keys:
 
-| Key             | Type                                           | Function                                                                       |
-| --------------- | ---------------------------------------------- | ------------------------------------------------------------------------------ |
-| `enabled`       | boolean                                        | Starts this voice at the start of a session.                                   |
-| `charsPerBlip`  | integer                                        | The number of sounded characters for one blip. Silent characters do not count. |
-| `toneMs`        | number                                         | The length of one tone in milliseconds.                                        |
-| `decay`         | positive number                                | Multiplies the material's decay rate. Lower values ring longer.                |
-| `volume`        | number from 0 to 1                             | The loudness of this voice.                                                    |
-| `material`      | `"wood"`, `"stone"`, `"ceramic"`, or `"glass"` | The resonant material.                                                         |
-| `touch`         | `"soft"`, `"normal"`, or `"firm"`              | The attack and upper-mode strength.                                            |
-| `baseFrequency` | number                                         | The reference frequency in Hz of this voice.                                   |
-| `reading`       | a reading object                               | How a character becomes a number, or becomes silent.                           |
-| `pitch`         | a pitch object                                 | How that number becomes a frequency.                                           |
+| Key             | Type                                           | Function                                                        |
+| --------------- | ---------------------------------------------- | --------------------------------------------------------------- |
+| `enabled`       | boolean                                        | Starts this voice at the start of a session.                    |
+| `toneMs`        | number                                         | The length of one tone in milliseconds.                         |
+| `decay`         | positive number                                | Multiplies the material's decay rate. Lower values ring longer. |
+| `volume`        | number from 0 to 1                             | The loudness of this voice.                                     |
+| `material`      | `"wood"`, `"stone"`, `"ceramic"`, or `"glass"` | The resonant material.                                          |
+| `touch`         | `"soft"`, `"normal"`, or `"firm"`              | The attack and upper-mode strength.                             |
+| `baseFrequency` | number                                         | The reference frequency in Hz of this voice.                    |
+| `reading`       | a reading object                               | How a character becomes a number, or becomes silent.            |
+| `pitch`         | a pitch object                                 | How that number becomes a frequency.                            |
 
 The file `blips.example.json` shows material and touch keys with example values.
 

@@ -45,13 +45,12 @@ export const presets: Record<PresetName, Preset> = {
       minIntervalMs: 45,
       voices: {
         text: {
-          charsPerBlip: 2,
           toneMs: 34,
           volume: 0.28,
           material: 'ceramic',
           touch: 'firm',
           baseFrequency: 440,
-          reading: { kind: 'alphabet' },
+          reading: { kind: 'alphabet', every: 2 },
           pitch: {
             kind: 'scalar',
             scale: MAJOR_PENTATONIC,
@@ -60,17 +59,15 @@ export const presets: Record<PresetName, Preset> = {
           }
         },
         thinking: {
-          charsPerBlip: 3,
           toneMs: 40,
           volume: 0.24,
           material: 'wood',
           touch: 'normal',
           baseFrequency: 220,
-          reading: { kind: 'alphabet' },
+          reading: { kind: 'alphabet', every: 3 },
           pitch: { kind: 'scalar', scale: BLUES, octaves: 2, mapping: 'wrap' }
         },
         tool: {
-          charsPerBlip: 4,
           toneMs: 18,
           volume: 0.2,
           material: 'ceramic',
@@ -78,7 +75,7 @@ export const presets: Record<PresetName, Preset> = {
           baseFrequency: 880,
           // Dense JSON read character by character, semitones apart: an arcade
           // machine reporting progress, not a melody.
-          reading: { kind: 'codepoint', span: 16 },
+          reading: { kind: 'codepoint', span: 16, every: 4 },
           pitch: { kind: 'chromatic', span: 7 }
         }
       }
@@ -94,13 +91,13 @@ export const presets: Record<PresetName, Preset> = {
       minIntervalMs: 150,
       voices: {
         text: {
-          charsPerBlip: 6,
           toneMs: 260,
           volume: 0.3,
           material: 'glass',
           touch: 'normal',
           baseFrequency: 415.3,
-          // Each word is a ringing run, and the runs climb across a sentence.
+          // One ring per word, climbing across a sentence and dropping at its
+          // end. The words pace it; nothing samples the letters inside them.
           reading: { kind: 'phrase', span: 4 },
           pitch: {
             kind: 'scalar',
@@ -110,7 +107,6 @@ export const presets: Record<PresetName, Preset> = {
           }
         },
         thinking: {
-          charsPerBlip: 8,
           toneMs: 420,
           volume: 0.26,
           material: 'glass',
@@ -120,14 +116,13 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
         },
         tool: {
-          charsPerBlip: 10,
           toneMs: 130,
           volume: 0.18,
           material: 'ceramic',
           touch: 'firm',
           baseFrequency: 830.61,
           // One struck pitch under the tails of the other two voices.
-          reading: { kind: 'class' },
+          reading: { kind: 'class', every: 10 },
           pitch: { kind: 'drone' }
         }
       }
@@ -142,7 +137,6 @@ export const presets: Record<PresetName, Preset> = {
       minIntervalMs: 420,
       voices: {
         text: {
-          charsPerBlip: 5,
           toneMs: 680,
           decay: 0.25,
           volume: 0.34,
@@ -151,29 +145,27 @@ export const presets: Record<PresetName, Preset> = {
           baseFrequency: 174.61,
           // Vowels only, on one pitch: a ping per few words, and nothing in
           // between. Consonants would make it a melody again.
-          reading: { kind: 'vowels' },
+          reading: { kind: 'vowels', every: 5 },
           pitch: { kind: 'drone' }
         },
         thinking: {
-          charsPerBlip: 6,
           toneMs: 840,
           decay: 0.25,
           volume: 0.3,
           material: 'glass',
           touch: 'soft',
           baseFrequency: 98,
-          reading: { kind: 'vowels' },
+          reading: { kind: 'vowels', every: 6 },
           pitch: { kind: 'drone' }
         },
         tool: {
-          charsPerBlip: 6,
           toneMs: 520,
           decay: 0.3,
           volume: 0.24,
           material: 'glass',
           touch: 'soft',
           baseFrequency: 261.63,
-          reading: { kind: 'vowels' },
+          reading: { kind: 'vowels', every: 6 },
           pitch: { kind: 'drone' }
         }
       }
@@ -188,7 +180,6 @@ export const presets: Record<PresetName, Preset> = {
       minIntervalMs: 42,
       voices: {
         text: {
-          charsPerBlip: 2,
           toneMs: 20,
           volume: 0.22,
           material: 'wood',
@@ -196,27 +187,25 @@ export const presets: Record<PresetName, Preset> = {
           baseFrequency: 987.77,
           // Four character classes over two semitones: the pitch barely moves,
           // so the ear hears the keys and not the letters.
-          reading: { kind: 'class' },
+          reading: { kind: 'class', every: 2 },
           pitch: { kind: 'chromatic', span: 2 }
         },
         thinking: {
-          charsPerBlip: 3,
           toneMs: 24,
           volume: 0.18,
           material: 'wood',
           touch: 'firm',
           baseFrequency: 493.88,
-          reading: { kind: 'class' },
+          reading: { kind: 'class', every: 3 },
           pitch: { kind: 'chromatic', span: 2 }
         },
         tool: {
-          charsPerBlip: 3,
           toneMs: 16,
           volume: 0.2,
           material: 'wood',
           touch: 'firm',
           baseFrequency: 1318.51,
-          reading: { kind: 'class' },
+          reading: { kind: 'class', every: 3 },
           pitch: { kind: 'drone' }
         }
       }
@@ -230,18 +219,16 @@ export const presets: Record<PresetName, Preset> = {
       minIntervalMs: 95,
       voices: {
         text: {
-          charsPerBlip: 4,
           toneMs: 150,
           volume: 0.26,
           material: 'glass',
           touch: 'normal',
           baseFrequency: 1046.5,
-          // Stepwise runs per word, six words to a turn of the crank.
+          // One stepwise note per word, six words to a turn of the crank.
           reading: { kind: 'phrase', span: 6 },
           pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
         },
         thinking: {
-          charsPerBlip: 5,
           toneMs: 210,
           volume: 0.22,
           material: 'ceramic',
@@ -251,13 +238,14 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
         },
         tool: {
-          charsPerBlip: 8,
           toneMs: 90,
           volume: 0.16,
           material: 'glass',
           touch: 'normal',
           baseFrequency: 1567.98,
-          reading: { kind: 'phrase', span: 4 },
+          // Tool arguments have few word boundaries, so this voice samples
+          // letters instead of following phrases.
+          reading: { kind: 'alphabet', every: 8 },
           pitch: {
             kind: 'scalar',
             scale: MAJOR_PENTATONIC,
@@ -276,14 +264,13 @@ export const presets: Record<PresetName, Preset> = {
       minIntervalMs: 190,
       voices: {
         text: {
-          charsPerBlip: 3,
           toneMs: 70,
           volume: 0.14,
           material: 'wood',
           touch: 'soft',
           // Vowels carry the line; consonants are the noise you do not want in
           // a shared room.
-          reading: { kind: 'vowels' },
+          reading: { kind: 'vowels', every: 3 },
           pitch: {
             kind: 'scalar',
             scale: MINOR_PENTATONIC,
@@ -292,12 +279,11 @@ export const presets: Record<PresetName, Preset> = {
           }
         },
         thinking: {
-          charsPerBlip: 4,
           toneMs: 110,
           volume: 0.1,
           material: 'wood',
           touch: 'soft',
-          reading: { kind: 'vowels' },
+          reading: { kind: 'vowels', every: 4 },
           pitch: {
             kind: 'scalar',
             scale: MINOR_PENTATONIC,

@@ -16,8 +16,6 @@ export type StreamKind = 'text' | 'thinking' | 'tool'
 /** Voicing for one stream kind, so the three are audibly distinguishable. */
 export interface VoiceConfig {
   readonly enabled: boolean
-  /** Emit one blip every N streamed characters of this kind. */
-  readonly charsPerBlip: number
   /** Length of a single tone, in milliseconds. */
   readonly toneMs: number
   /** Multiplier for the material's modal decay rate; lower values ring longer. */
@@ -64,14 +62,13 @@ export const defaultConfig: BlipConfig = {
     // Prose: mid register, the voice the ear tracks.
     text: {
       enabled: true,
-      charsPerBlip: 3,
       toneMs: 55,
       decay: 1,
       volume: 0.35,
       material: 'ceramic',
       touch: 'normal',
       baseFrequency: 220,
-      reading: { kind: 'alphabet' },
+      reading: { kind: 'alphabet', every: 3 },
       pitch: {
         kind: 'scalar',
         scale: MAJOR_PENTATONIC,
@@ -83,14 +80,13 @@ export const defaultConfig: BlipConfig = {
     // lose on laptop speakers, so it sits at 146.83 Hz (D3) with more gain.
     thinking: {
       enabled: true,
-      charsPerBlip: 4,
       toneMs: 90,
       decay: 1,
       volume: 0.32,
       material: 'wood',
       touch: 'soft',
       baseFrequency: 146.83,
-      reading: { kind: 'alphabet' },
+      reading: { kind: 'alphabet', every: 4 },
       pitch: {
         kind: 'scalar',
         scale: MINOR_PENTATONIC,
@@ -101,14 +97,13 @@ export const defaultConfig: BlipConfig = {
     // Tool arguments: short, bright ticks. Dense JSON, so it blips less often.
     tool: {
       enabled: true,
-      charsPerBlip: 6,
       toneMs: 26,
       decay: 1,
       volume: 0.22,
       material: 'glass',
       touch: 'soft',
       baseFrequency: 523.25,
-      reading: { kind: 'alphabet' },
+      reading: { kind: 'alphabet', every: 6 },
       pitch: {
         kind: 'scalar',
         scale: MAJOR_PENTATONIC,

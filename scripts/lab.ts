@@ -222,9 +222,16 @@ const voiceFor = (model: Model): VoiceConfig =>
 /** The reading and pitch of a voice, short enough for one status line. */
 const readingLabel = (reading: ReadingConfig): string =>
   match(reading)
-    .with({ kind: 'codepoint' }, ({ span }) => `codepoint ${String(span)}`)
-    .with({ kind: 'phrase' }, ({ span }) => `phrase ${String(span)}`)
-    .otherwise(({ kind }) => kind)
+    .with(
+      { kind: 'codepoint' },
+      ({ span, every }) =>
+        `codepoint ${String(span)} every ${String(every)} chars`
+    )
+    .with(
+      { kind: 'phrase' },
+      ({ span }) => `phrase ${String(span)} one per word`
+    )
+    .otherwise(({ kind, every }) => `${kind} every ${String(every)} chars`)
 
 const pitchLabel = (pitch: PitchConfig): string =>
   match(pitch)
@@ -499,7 +506,7 @@ const createLabApp = (
       choiceLine('preset', PRESET_NAMES, model.presetIndex),
       choiceLine('material', MATERIALS, model.materialIndex),
       '',
-      `${accent('sound')}  ${voice.touch} touch  ${String(voice.toneMs)} ms  ${voice.baseFrequency.toFixed(2)} Hz  every ${String(voice.charsPerBlip)} chars`,
+      `${accent('sound')}  ${voice.touch} touch  ${String(voice.toneMs)} ms  ${voice.baseFrequency.toFixed(2)} Hz`,
       `${accent('voice')}  ${readingLabel(voice.reading)} -> ${pitchLabel(voice.pitch)}`,
       `${accent('preset')} ${presets[preset].description}`,
       speedSlider(model.streamSpeedIndex),
