@@ -576,41 +576,43 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // A rounded speech blip with a gradual fade, based on voice_sans.mp3.
+  // The dedicated procedural vocal renderer keeps the approved Sans timbre,
+  // rising pitch and cycle motion without a sampled asset.
   sans: {
-    description: 'A deadpan mumble. Rounded low blips, one for each character.',
+    description:
+      'A rising vocal blip. Rounded low tones, one for each character.',
     patch: {
       // Keep the character cadence independent of the longer sample envelope.
       minIntervalMs: 66,
       voices: {
         text: {
-          toneMs: 115,
+          toneMs: 140,
           decay: 5,
           // A short rise, a held body, then a fade across the second half.
           swell: 0.15,
           hold: 0.5,
           glide: 0,
           volume: 0.3,
-          material: 'brass',
+          material: 'vocal',
           color: { kind: 'fixed', at: 0.5 },
           touch: 'normal',
-          // Most of the energy stays in the fundamental and second harmonic.
+          // The approved Sans register and envelope stay fixed; the renderer
+          // supplies the intrinsic rise and cycle motion.
           baseFrequency: 164.81,
           reading: { kind: 'class', every: 1 },
           pitch: { kind: 'drone' }
         },
         thinking: {
-          toneMs: 115,
+          toneMs: 140,
           decay: 5,
           swell: 0.15,
           hold: 0.5,
           glide: 0,
           volume: 0.24,
           // A fourth below the text voice, at half the rate: the same mouth,
-          // talking to itself. `reed` drops the upper partials, so it reads as
-          // the quieter voice without giving up the register.
+          // talking to itself, quieter and with a softer attack.
           baseFrequency: 123.47,
-          material: 'reed',
+          material: 'vocal',
           color: { kind: 'fixed', at: 0.5 },
           touch: 'soft',
           reading: { kind: 'class', every: 2 },

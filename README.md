@@ -34,8 +34,11 @@ octave. A pentatonic scale avoids many close semitone steps. Modal resonances ad
 partials, so simultaneous blips can have tension.
 
 The modal synthesizer combines several resonant modes for each material. It adds a short filtered-noise attack.
+The dedicated `vocal` material uses measured harmonic phase and amplitude controls across up to 10,000
+harmonics. Its procedural contour adds intrinsic rising pitch and cycle motion.
 
-The synthesizer renders each sound as mono PCM. It keeps rendered sounds in memory. The `afplay` backend also writes each sound to a WAV file cache.
+The synthesizer renders each sound as mono PCM at runtime. It keeps rendered sounds in memory. The `afplay`
+backend also writes each sound to a WAV file cache. No sampled audio asset or Python runtime is required.
 
 ## Streams
 
@@ -72,19 +75,19 @@ display, and it puts every effect in the graph.
 
 Each stream selects a material and a touch. The first four materials are struck objects: their
 partials are inharmonic and they decay from one impulse. Material names evoke familiar objects, but
-they do not model physical materials. The last two are sustained, and they are built differently:
-a harmonic source at the pitch, read through three resonances fixed in Hz. That is the structure of
-a voice, and a struck object cannot imitate it however long its tone is held. Touch settings change
-the attack, upper modes, and attack noise.
+they do not model physical materials. `reed` and `brass` are generic sustained modal materials. The
+dedicated `vocal` material uses a procedural harmonic renderer. Touch settings change the attack,
+upper modes, and attack noise.
 
-| Material  | Character                                                       |
-| --------- | --------------------------------------------------------------- |
-| `wood`    | Few modes with a short decay.                                   |
-| `stone`   | Dry low modes with sparse inharmonic upper resonances.          |
-| `ceramic` | Bright modes with slight inharmonic spacing.                    |
-| `glass`   | Bright upper modes with a long decay.                           |
-| `reed`    | Odd harmonics under a low resonance. Hollow, narrow, and dark.  |
-| `brass`   | Every harmonic under three resonances. Rounded, low, and vocal. |
+| Material  | Character                                                      |
+| --------- | -------------------------------------------------------------- |
+| `wood`    | Few modes with a short decay.                                  |
+| `stone`   | Dry low modes with sparse inharmonic upper resonances.         |
+| `ceramic` | Bright modes with slight inharmonic spacing.                   |
+| `glass`   | Bright upper modes with a long decay.                          |
+| `reed`    | Odd harmonics under a low resonance. Hollow, narrow, and dark. |
+| `brass`   | Every harmonic under three resonances. Generic rounded voice.  |
+| `vocal`   | Procedural rising voice with measured harmonic controls.       |
 
 | Touch    | Character                                          |
 | -------- | -------------------------------------------------- |
@@ -164,7 +167,7 @@ presets. The default preset has the name `default`.
 | `cipher`     | One semitone for each letter. You hear a word as it is spelled.                     | `chromatic` |
 | `telegraph`  | A wire. Each character is one tick, and only the spaces speak.                      | `class`     |
 | `hexdump`    | Raw bytes. Punctuation sounds, and the tool calls lead.                             | `codepoint` |
-| `sans`       | A deadpan mumble. Rounded low blips, one for each character.                        | `brass`     |
+| `sans`       | A rising vocal blip. Rounded low tones, one for each character.                     | `vocal`     |
 
 The six presets after `quiet` each show one reading or one pitch with nothing in its way:
 
@@ -179,18 +182,16 @@ The six presets after `quiet` each show one reading or one pitch with nothing in
 - `hexdump` reads the tool arguments character by character. It is the one preset in which the
   tool voice leads.
 
-`sans` uses a sustained material for a low character voice. Each text blip lasts 115 milliseconds
+`sans` uses the dedicated `vocal` material for a low character voice. Each text blip lasts 115 milliseconds
 at 164.81 Hz. It rises across its first 15%, holds until its midpoint, then fades.
 The character interval remains 66 milliseconds, independent of the blip duration.
-One fixed vowel colour gives each character the same mouth shape.
-The reasoning voice uses the same envelope and a fixed colour on the narrower `reed`,
+One fixed colour value gives each character the same vocal shape.
+The reasoning voice uses the same renderer and envelope with a quieter, softer touch,
 at 123.47 Hz and half the character rate. The tool voice remains a short stone knock.
 
-The text voice approximates `voice_sans.mp3`, which contains about 115 milliseconds of audible
-sound. The reference has a fundamental near 165 Hz and its strongest spectral peak near 330 Hz.
-The `brass` resonances emphasize this second harmonic, with weaker upper resonances near
-1340 Hz and 2800 Hz. The synthesized pitch stays fixed rather than reproducing the recording's
-small pitch changes. Every partial comes from the synthesis formula, not sampled audio.
+The `vocal` renderer uses measured harmonic phase and amplitude controls for harmonics up to about 10,000 Hz.
+Its intrinsic contour adds rising pitch and cycle motion during each tone. All samples come from this
+runtime procedure. The preset does not load a sampled recording and does not require Python.
 
 To hear all presets one after the other, run `mise run audition`.
 
@@ -423,21 +424,21 @@ preset, then the first file, then the second file. A file gives only the keys th
 
 Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts these keys:
 
-| Key             | Type                                                                | Function                                                        |
-| --------------- | ------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `enabled`       | boolean                                                             | Starts this voice at the start of a session.                    |
-| `toneMs`        | number                                                              | The length of one tone in milliseconds.                         |
-| `decay`         | positive number                                                     | Multiplies the material's decay rate. Lower values ring longer. |
-| `swell`         | number from 0 to 1                                                  | The part of the tone spent rising to full level.                |
-| `hold`          | number from 0 to 1                                                  | The part of the tone held at full body before the decay starts. |
-| `glide`         | number                                                              | Semitones the pitch falls across one tone. 0 holds it steady.   |
-| `volume`        | number from 0 to 1                                                  | The loudness of this voice.                                     |
-| `material`      | `"wood"`, `"stone"`, `"ceramic"`, `"glass"`, `"reed"`, or `"brass"` | The resonant material.                                          |
-| `color`         | a colour object                                                     | Where the second resonance sits, for a sustained material.      |
-| `touch`         | `"soft"`, `"normal"`, or `"firm"`                                   | The attack and upper-mode strength.                             |
-| `baseFrequency` | number                                                              | The reference frequency in Hz of this voice.                    |
-| `reading`       | a reading object                                                    | How a character becomes a number, or becomes silent.            |
-| `pitch`         | a pitch object                                                      | How that number becomes a frequency.                            |
+| Key             | Type                                                                           | Function                                                        |
+| --------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| `enabled`       | boolean                                                                        | Starts this voice at the start of a session.                    |
+| `toneMs`        | number                                                                         | The length of one tone in milliseconds.                         |
+| `decay`         | positive number                                                                | Multiplies the material's decay rate. Lower values ring longer. |
+| `swell`         | number from 0 to 1                                                             | The part of the tone spent rising to full level.                |
+| `hold`          | number from 0 to 1                                                             | The part of the tone held at full body before the decay starts. |
+| `glide`         | number                                                                         | Semitones the pitch falls across one tone. 0 holds it steady.   |
+| `volume`        | number from 0 to 1                                                             | The loudness of this voice.                                     |
+| `material`      | `"wood"`, `"stone"`, `"ceramic"`, `"glass"`, `"reed"`, `"brass"`, or `"vocal"` | The resonant material.                                          |
+| `color`         | a colour object                                                                | Where the second resonance sits, for a sustained material.      |
+| `touch`         | `"soft"`, `"normal"`, or `"firm"`                                              | The attack and upper-mode strength.                             |
+| `baseFrequency` | number                                                                         | The reference frequency in Hz of this voice.                    |
+| `reading`       | a reading object                                                               | How a character becomes a number, or becomes silent.            |
+| `pitch`         | a pitch object                                                                 | How that number becomes a frequency.                            |
 
 A colour object is either `{ "kind": "fixed", "at": <0 to 1> }` or
 `{ "kind": "vowel", "span": <count> }`.

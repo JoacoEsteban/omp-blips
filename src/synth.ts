@@ -1,4 +1,5 @@
 import { match } from 'ts-pattern'
+import { renderVocal } from './vocal.ts'
 
 export const SAMPLE_RATE = 44_100
 
@@ -6,25 +7,25 @@ const BITS_PER_SAMPLE = 16
 const CHANNELS = 1
 const PEAK = 0x7fff
 const NYQUIST = SAMPLE_RATE / 2
-const SOUND_VERSION = 'formant-v5'
+const SOUND_VERSION = 'formant-v6'
 /** Nominal level of the modal sum, before the ceiling is enforced. */
-const VOICE_GAIN = 0.55
+export const VOICE_GAIN = 0.55
 /** No rendered sample passes this level, whatever the material and touch are. */
-const CEILING = 0.92
+export const CEILING = 0.92
 /** Fade at the end of the buffer, so the modal tail stops without a click. */
 const RELEASE_MS = 12
-const RELEASE_FRAMES = Math.max(
+export const RELEASE_FRAMES = Math.max(
   1,
   Math.round((SAMPLE_RATE * RELEASE_MS) / 1000)
 )
 
 /**
  * What is resonating. The first four are struck objects: inharmonic partials
- * over a short impulse. `reed` and `brass` are sustained tones with harmonic
- * partials and almost no decay of their own — the spectra a voice needs, which
- * a struck object cannot produce however long its tone is held.
+ * over a short impulse. `reed` and `brass` are generic sustained modal voices
+ * with harmonic partials. `vocal` is a dedicated procedural voice renderer.
  */
-export type Material = 'wood' | 'stone' | 'ceramic' | 'glass' | 'reed' | 'brass'
+export type Material =
+  'wood' | 'stone' | 'ceramic' | 'glass' | 'reed' | 'brass' | 'vocal'
 export type Touch = 'soft' | 'normal' | 'firm'
 
 export interface Sound {
@@ -59,7 +60,7 @@ interface TouchProfile {
   readonly noiseStrength: number
 }
 
-interface Formant {
+export interface Formant {
   /** Centre of the resonance, in Hz, independent of the pitch. */
   readonly hz: number
   /** Width at 3 dB down, in Hz. Narrow rings, wide colours. */
@@ -78,11 +79,9 @@ interface Tract {
 }
 
 /**
- * The two sustained materials are a source and a filter, the way a voice is: a
- * harmonic source at the pitch, shaped by resonances that stay where they are
- * when the pitch moves. That fixed-in-Hz behaviour is what separates a vowel
- * from a synthesizer patch, and it is the one thing a struck material cannot
- * do — its partials are inharmonic and its brightness dies with the strike.
+ * The generic sustained materials are a source and a filter, the way a voice
+ * is: a harmonic source at the pitch, shaped by fixed-Hz resonances. The
+ * dedicated `vocal` material uses its own procedural renderer.
  */
 const TRACTS: Readonly<Record<'reed' | 'brass', Tract>> = {
   // Close and narrow: odd harmonics only, under a low first resonance and a
@@ -112,7 +111,7 @@ const TRACTS: Readonly<Record<'reed' | 'brass', Tract>> = {
 }
 
 /** Magnitude of one two-pole resonance at a frequency. */
-const resonance = (hz: number, formant: Formant): number =>
+export const resonance = (hz: number, formant: Formant): number =>
   (formant.gain * (formant.hz * formant.bw)) /
   Math.sqrt((formant.hz ** 2 - hz ** 2) ** 2 + (hz * formant.bw) ** 2)
 
@@ -153,7 +152,10 @@ const voiced = (
 }
 
 const MATERIAL_MODES: Readonly<
-  Record<Exclude<Material, 'reed' | 'brass'>, readonly ResonanceMode[]>
+  Record<
+    Exclude<Material, 'reed' | 'brass' | 'vocal'>,
+    readonly ResonanceMode[]
+  >
 > = {
   wood: [
     { ratio: 1, gain: 0.9, decay: 4.5 },
@@ -180,8 +182,13 @@ const MATERIAL_MODES: Readonly<
   ]
 }
 
-/** The partials of one sound, struck or voiced. */
-const modesOf = (sound: Sound): readonly ResonanceMode[] =>
+/** A sound rendered by the generic modal path; the dedicated `vocal` renderer never reaches it. */
+export type ModalSound = Sound & {
+  readonly material: Exclude<Material, 'vocal'>
+}
+
+/** The partials of one generic modal sound, struck or sustained. */
+const modesOf = (sound: ModalSound): readonly ResonanceMode[] =>
   match(sound.material)
     .with('reed', 'brass', (name) =>
       voiced(TRACTS[name], sound.frequency, sound.color)
@@ -206,7 +213,7 @@ const seedFor = (key: string): number => {
 }
 
 /** Render restrained modal resonances with a deterministic filtered-noise attack. */
-const renderVoice = (sound: Sound): Float32Array => {
+const renderModalVoice = (sound: ModalSound): Float32Array => {
   const frequency = sound.frequency
   const frames = Math.max(1, Math.round((SAMPLE_RATE * sound.toneMs) / 1000))
   const profile = TOUCH_PROFILES[sound.touch]
@@ -306,6 +313,21 @@ const renderVoice = (sound: Sound): Float32Array => {
   const limit = CEILING / peak
   for (const [index, value] of samples.entries()) samples[index] = value * limit
   return samples
+}
+
+/** Whether a sound uses the dedicated `vocal` renderer instead of the generic modal path. */
+const isVocalSound = (
+  sound: Sound
+): sound is Sound & { readonly material: 'vocal' } => sound.material === 'vocal'
+
+const isModalSound = (sound: Sound): sound is ModalSound =>
+  sound.material !== 'vocal'
+
+/** Dispatch a sound to the generic modal or dedicated vocal renderer. */
+const renderVoice = (sound: Sound): Float32Array => {
+  if (isVocalSound(sound)) return renderVocal(sound)
+  if (isModalSound(sound)) return renderModalVoice(sound)
+  throw new Error(`Unreachable material: ${sound.material}`)
 }
 
 export const soundKey = (sound: Sound): string =>

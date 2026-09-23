@@ -67,7 +67,15 @@ const voiceSchema = z
     hold: z.number().min(0).max(1),
     glide: z.number(),
     volume: z.number().min(0).max(1),
-    material: z.enum(['wood', 'stone', 'ceramic', 'glass', 'reed', 'brass']),
+    material: z.enum([
+      'wood',
+      'stone',
+      'ceramic',
+      'glass',
+      'reed',
+      'brass',
+      'vocal'
+    ]),
     color: colorSchema,
     touch: z.enum(['soft', 'normal', 'firm']),
     baseFrequency: z.number().positive(),

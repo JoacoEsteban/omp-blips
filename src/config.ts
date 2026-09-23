@@ -29,9 +29,9 @@ export interface VoiceConfig {
   readonly glide: number
   /** Output gain, 0..1. */
   readonly volume: number
-  /** Modal material for this stream. */
+  /** Material for this stream. */
   readonly material: Material
-  /** How a character index becomes a vowel colour, for sustained materials. */
+  /** How a character index becomes a colour for sustained materials. */
   readonly color: ColorConfig
   /** Strike force for this stream. */
   readonly touch: Touch
