@@ -192,15 +192,21 @@ builds does not reach your ear.
 | `codepoint` | Each visible character, after a division by `span`. Punctuation sounds too.   | `every`      |
 | `class`     | Four numbers: vowel, consonant, digit, punctuation. Whitespace is silent.     | `every`      |
 | `vowels`    | Vowels only, by their position in `aeiou`. The text becomes much more sparse. | `every`      |
-| `phrase`    | One blip for each word. The pitch goes up after each word.                    | one per word |
+| `phrase`    | One blip for each word. The length of a word moves the pitch of the next one. | one per word |
 
 `every` is a number of sounded characters for one blip. A silent character costs nothing.
 
-`phrase` has memory and no `every` value. It makes one blip at the start of each word. A space
-lifts the floor of the next word, and the floor returns to zero after a full stop, a question mark
-or an exclamation mark. As a result, the melody is the shape of the sentence, and the silence
-between two blips is the length of a word. The words give the rate, and no counter can move the
-blip to a different letter.
+`phrase` has memory and no `every` value. It makes one blip at the start of each word. The length
+of that word then moves the floor of the next word, and the floor returns to zero after a full
+stop, a question mark or an exclamation mark.
+
+The text moves the pitch, and not a counter. A counter adds the same value after each word, which
+gives a scale run or a short figure that repeats. Word lengths are different, so a short word makes
+a small move and a long word makes a large one. Two sentences with the same number of words do not
+sound the same.
+
+As a result, the melody is the shape of the sentence, and the silence between two blips is the
+length of a word.
 
 A configuration file gives a reading as an object with a `kind`:
 
@@ -208,8 +214,8 @@ A configuration file gives a reading as an object with a `kind`:
 { "voices": { "text": { "reading": { "kind": "phrase", "span": 4 } } } }
 ```
 
-The `span` of `phrase` is the number of words before the floor returns to zero. The `span` of
-`codepoint` is the number of different values that it gives.
+The `span` of `phrase` is the number of degrees that the floor moves through before it starts
+again. The `span` of `codepoint` is the number of different values that it gives.
 
 ## Pitches
 

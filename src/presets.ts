@@ -230,7 +230,8 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'normal',
           baseFrequency: 1046.5,
-          // One stepwise note per word, six words to a turn of the crank.
+          // One note per word, and `step: 1` walks the scale in order: this is
+          // the preset whose whole character is stepwise motion.
           reading: { kind: 'phrase', span: 6 },
           pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
         },
@@ -317,7 +318,8 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'soft',
           baseFrequency: 392,
-          // Seven words to climb, which is about one line of prose.
+          // The widest span of any preset: seven degrees, so the length of a
+          // word reads clearly as the size of a leap.
           reading: { kind: 'phrase', span: 7 },
           pitch: {
             kind: 'scalar',
@@ -382,7 +384,7 @@ export const presets: Record<PresetName, Preset> = {
           material: 'wood',
           touch: 'normal',
           baseFrequency: 293.66,
-          // `drone` reads no index, so the drift has nowhere to go: span 1.
+          // `drone` reads no index, so the drift has nowhere to go.
           reading: { kind: 'phrase', span: 1 },
           pitch: { kind: 'drone' }
         },

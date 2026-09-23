@@ -127,9 +127,14 @@ class Vowels extends Memoryless {
 }
 
 /**
- * One blip per word, pitched by the floor. The floor climbs at each word
- * boundary and returns to zero after a terminal mark, so the melody is the
- * shape of the sentence and the silences are the lengths of the words.
+ * One blip per word, pitched by a floor that the text moves. The floor advances
+ * by the length of the word that just ended, and returns to zero after a
+ * terminal mark: the melody is the shape of the sentence, and the silences are
+ * the lengths of the words.
+ *
+ * A fixed increment would be a counter, and a counter is a cycle — the same
+ * figure under every sentence. Word lengths vary, so a short word steps and a
+ * long one leaps, and the line can only be predicted by reading ahead.
  *
  * This is the reading that paces itself. Sampling the characters inside a word
  * would put the blip at an arbitrary letter, and the sentence would stop being
@@ -139,41 +144,44 @@ class Phrase implements Reading {
   constructor(
     private readonly span: number,
     private readonly floor: number,
-    private readonly inWord: boolean
+    /** Characters of the word in progress; zero between words. */
+    private readonly length: number
   ) {}
 
   read(char: string): readonly [Reading, number | undefined] {
     return match(char)
       .when(
         (c) => TERMINALS.includes(c),
-        () => [new Phrase(this.span, 0, false), undefined] as const
+        () => [new Phrase(this.span, 0, 0), undefined] as const
       )
       .when(
         (c) => WHITESPACE.test(c),
         () => [this.parted(), undefined] as const
       )
       .when(
-        () => this.inWord,
-        () => [this, undefined] as const
+        () => this.length > 0,
+        () =>
+          [
+            new Phrase(this.span, this.floor, this.length + 1),
+            undefined
+          ] as const
       )
       .otherwise(
-        () => [new Phrase(this.span, this.floor, true), this.floor] as const
+        () => [new Phrase(this.span, this.floor, 1), this.floor] as const
       )
   }
 
   /**
-   * A word boundary lifts the floor once. A run of spaces is still one
-   * boundary, and the space after a terminal mark keeps the reset floor, so a
-   * sentence always opens on its lowest note.
+   * A word boundary moves the floor by the length of that word. A run of spaces
+   * is still one boundary, and the space after a terminal mark keeps the reset
+   * floor, so a sentence always opens on its lowest note.
    */
   private parted(): Phrase {
-    return match(this.inWord)
-      .with(false, () => new Phrase(this.span, this.floor, false))
-      .with(
-        true,
-        () => new Phrase(this.span, (this.floor + 1) % this.span, false)
+    return match(this.length)
+      .with(0, () => new Phrase(this.span, this.floor, 0))
+      .otherwise(
+        () => new Phrase(this.span, (this.floor + this.length) % this.span, 0)
       )
-      .exhaustive()
   }
 }
 
@@ -234,5 +242,5 @@ export const readingOf = (config: ReadingConfig): Reading =>
       { kind: 'vowels' },
       ({ every }) => new Sampled(every, new Vowels(), 0)
     )
-    .with({ kind: 'phrase' }, ({ span }) => new Phrase(span, 0, false))
+    .with({ kind: 'phrase' }, ({ span }) => new Phrase(span, 0, 0))
     .exhaustive()
