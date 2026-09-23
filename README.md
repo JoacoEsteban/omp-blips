@@ -116,15 +116,34 @@ provider failure has the same effect as a manual stop.
 A preset is a complete set of values for the three voices. The file `src/presets.ts` holds the
 presets. The default preset has the name `default`.
 
-| Preset       | Sound                                                                               |
-| ------------ | ----------------------------------------------------------------------------------- |
-| `default`    | A melody for the text, a dark murmur for the reasoning, bright ticks for the tools. |
-| `arcade`     | Fast small tones in a high range. A text crawl from a 1988 video game.              |
-| `gamelan`    | Struck ceramic and glass. The long tones continue and mix into a haze.              |
-| `sonar`      | A submarine. One slow low ping after each few words.                                |
-| `typewriter` | Mechanical keys. The pitch changes very little, so you hear rhythm.                 |
-| `music-box`  | A wind-up music box. High, sweet, and in small steps.                               |
-| `quiet`      | Background sound. Text only, low volume, large spaces between the blips.            |
+| Preset       | Sound                                                                               | Shows       |
+| ------------ | ----------------------------------------------------------------------------------- | ----------- |
+| `default`    | A melody for the text, a dark murmur for the reasoning, bright ticks for the tools. | `alphabet`  |
+| `arcade`     | Fast small tones in a high range. A text crawl from a 1988 video game.              | `codepoint` |
+| `gamelan`    | Struck ceramic and glass. The long tones continue and mix into a haze.              | `phrase`    |
+| `sonar`      | A submarine. One slow low ping after each few words.                                | `vowels`    |
+| `typewriter` | Mechanical keys. The pitch changes very little, so you hear rhythm.                 | `class`     |
+| `music-box`  | A wind-up music box. High, sweet, and in small steps.                               | `phrase`    |
+| `quiet`      | Background sound. Text only, low volume, large spaces between the blips.            | `vowels`    |
+| `haiku`      | One held note for each word. The melody is the shape of the sentence.               | `phrase`    |
+| `pulse`      | One beat for each word, on one pitch. The rhythm of the writing, and nothing more.  | `drone`     |
+| `plainchant` | Vowels only, held, in one octave. The text sings its spine.                         | `vowels`    |
+| `cipher`     | One semitone for each letter. You hear a word as it is spelled.                     | `chromatic` |
+| `telegraph`  | A wire. Each character is one tick, and only the spaces speak.                      | `class`     |
+| `hexdump`    | Raw bytes. Punctuation sounds, and the tool calls lead.                             | `codepoint` |
+
+The six presets after `quiet` each show one reading or one pitch with nothing in its way:
+
+- `haiku` gives `phrase` long tones and a low pace floor, so no word is lost.
+- `pulse` puts `phrase` against `drone`. The reading keeps the words and the pitch drops the
+  melody, so only the rhythm remains.
+- `plainchant` keeps `vowels` in one octave. Vowels are the part of a word that a singer holds.
+- `cipher` puts `alphabet` against `chromatic` at one blip for each letter. The pitch goes up with
+  the alphabet and there is no scale, so `a` is always the same note.
+- `telegraph` puts `class` against `drone` at one blip for each character. Only whitespace is
+  silent, so the words show as gaps.
+- `hexdump` reads the tool arguments character by character. It is the one preset in which the
+  tool voice leads.
 
 To hear all presets one after the other, run `mise run audition`.
 

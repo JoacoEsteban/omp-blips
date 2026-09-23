@@ -14,7 +14,13 @@ export const PRESET_NAMES = [
   'sonar',
   'typewriter',
   'music-box',
-  'quiet'
+  'quiet',
+  'haiku',
+  'pulse',
+  'plainchant',
+  'cipher',
+  'telegraph',
+  'hexdump'
 ] as const
 
 export type PresetName = (typeof PRESET_NAMES)[number]
@@ -292,6 +298,268 @@ export const presets: Record<PresetName, Preset> = {
           }
         },
         tool: { enabled: false, material: 'wood', touch: 'soft' }
+      }
+    }
+  },
+
+  // `phrase` with nothing in its way: long tones, a low pace floor, and a wide
+  // drift. One note per word, so the melody is the sentence and the rests are
+  // the words.
+  haiku: {
+    description: 'One held note per word. Prose becomes a slow melodic line.',
+    patch: {
+      minIntervalMs: 60,
+      voices: {
+        text: {
+          toneMs: 520,
+          decay: 0.45,
+          volume: 0.3,
+          material: 'glass',
+          touch: 'soft',
+          baseFrequency: 392,
+          // Seven words to climb, which is about one line of prose.
+          reading: { kind: 'phrase', span: 7 },
+          pitch: {
+            kind: 'scalar',
+            scale: HIRAJOSHI,
+            octaves: 2,
+            mapping: 'fold'
+          }
+        },
+        thinking: {
+          toneMs: 700,
+          decay: 0.35,
+          volume: 0.24,
+          material: 'glass',
+          touch: 'soft',
+          baseFrequency: 174.61,
+          reading: { kind: 'phrase', span: 5 },
+          pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
+        },
+        tool: {
+          toneMs: 180,
+          decay: 0.6,
+          volume: 0.12,
+          material: 'glass',
+          touch: 'soft',
+          baseFrequency: 783.99,
+          // Tool arguments have almost no word boundaries. This voice stays a
+          // faint sampled shimmer under the prose instead of pretending to
+          // have phrases.
+          reading: { kind: 'alphabet', every: 12 },
+          pitch: {
+            kind: 'scalar',
+            scale: MAJOR_PENTATONIC,
+            octaves: 1,
+            mapping: 'fold'
+          }
+        }
+      }
+    }
+  },
+
+  // `phrase` against `drone`: the reading keeps the structure and the pitch
+  // throws away every melodic choice. What is left is the raw rhythm of
+  // writing — one beat per word, and the length of each word as silence.
+  pulse: {
+    description: 'One beat per word, one pitch. The heartbeat of the writing.',
+    patch: {
+      minIntervalMs: 50,
+      voices: {
+        text: {
+          toneMs: 90,
+          decay: 1.4,
+          volume: 0.3,
+          material: 'wood',
+          touch: 'normal',
+          baseFrequency: 293.66,
+          // `drone` reads no index, so the drift has nowhere to go: span 1.
+          reading: { kind: 'phrase', span: 1 },
+          pitch: { kind: 'drone' }
+        },
+        thinking: {
+          toneMs: 130,
+          decay: 1.2,
+          volume: 0.26,
+          material: 'wood',
+          touch: 'soft',
+          baseFrequency: 146.83,
+          reading: { kind: 'phrase', span: 1 },
+          pitch: { kind: 'drone' }
+        },
+        tool: {
+          toneMs: 22,
+          volume: 0.16,
+          material: 'stone',
+          touch: 'firm',
+          baseFrequency: 587.33,
+          reading: { kind: 'class', every: 6 },
+          pitch: { kind: 'drone' }
+        }
+      }
+    }
+  },
+
+  // `vowels` is the only reading that thins prose without sampling it: it keeps
+  // every vowel and drops every consonant, which is the part of a word a singer
+  // holds. One octave, so the line never leaps.
+  plainchant: {
+    description: 'Vowels only, held in one octave. The text sings its spine.',
+    patch: {
+      minIntervalMs: 220,
+      voices: {
+        text: {
+          toneMs: 620,
+          decay: 0.3,
+          volume: 0.3,
+          material: 'glass',
+          touch: 'soft',
+          baseFrequency: 196,
+          reading: { kind: 'vowels', every: 2 },
+          pitch: {
+            kind: 'scalar',
+            scale: MINOR_PENTATONIC,
+            octaves: 1,
+            mapping: 'fold'
+          }
+        },
+        thinking: {
+          toneMs: 780,
+          decay: 0.25,
+          volume: 0.24,
+          material: 'wood',
+          touch: 'soft',
+          baseFrequency: 130.81,
+          reading: { kind: 'vowels', every: 3 },
+          pitch: {
+            kind: 'scalar',
+            scale: MINOR_PENTATONIC,
+            octaves: 1,
+            mapping: 'fold'
+          }
+        },
+        // A chant does not tick through JSON.
+        tool: { enabled: false, material: 'wood', touch: 'soft' }
+      }
+    }
+  },
+
+  // `alphabet` against `chromatic`, one blip per letter and no scale to hide
+  // behind: pitch rises strictly with the alphabet over 26 semitones. Repeated
+  // letters are unmistakable, and you can hear a word being spelled.
+  cipher: {
+    description: 'A semitone for each letter. You can hear the spelling.',
+    patch: {
+      minIntervalMs: 36,
+      voices: {
+        text: {
+          toneMs: 40,
+          volume: 0.26,
+          material: 'ceramic',
+          touch: 'normal',
+          baseFrequency: 196,
+          reading: { kind: 'alphabet', every: 1 },
+          pitch: { kind: 'chromatic', span: 26 }
+        },
+        thinking: {
+          toneMs: 60,
+          volume: 0.22,
+          material: 'wood',
+          touch: 'soft',
+          baseFrequency: 98,
+          reading: { kind: 'alphabet', every: 2 },
+          pitch: { kind: 'chromatic', span: 26 }
+        },
+        tool: {
+          toneMs: 20,
+          volume: 0.18,
+          material: 'glass',
+          touch: 'firm',
+          baseFrequency: 392,
+          reading: { kind: 'alphabet', every: 4 },
+          pitch: { kind: 'chromatic', span: 12 }
+        }
+      }
+    }
+  },
+
+  // `class` against `drone`: the reading voices everything except whitespace,
+  // and the pitch refuses to vary. Only the gaps between words carry anything,
+  // which is exactly what a telegraph line sounds like.
+  telegraph: {
+    description: 'A wire. Every character a tick, only the spaces speak.',
+    patch: {
+      minIntervalMs: 28,
+      voices: {
+        text: {
+          toneMs: 14,
+          decay: 1.8,
+          volume: 0.24,
+          material: 'wood',
+          touch: 'firm',
+          baseFrequency: 659.25,
+          reading: { kind: 'class', every: 1 },
+          pitch: { kind: 'drone' }
+        },
+        thinking: {
+          toneMs: 18,
+          decay: 1.6,
+          volume: 0.2,
+          material: 'stone',
+          touch: 'soft',
+          baseFrequency: 440,
+          reading: { kind: 'class', every: 2 },
+          pitch: { kind: 'drone' }
+        },
+        tool: {
+          toneMs: 10,
+          decay: 2,
+          volume: 0.16,
+          material: 'stone',
+          touch: 'firm',
+          baseFrequency: 880,
+          reading: { kind: 'class', every: 2 },
+          pitch: { kind: 'drone' }
+        }
+      }
+    }
+  },
+
+  // `codepoint` against `chromatic`, with the tool voice at every character:
+  // brackets, quotes and colons all sound, so the shape of a JSON payload is
+  // audible. The one preset that makes tool arguments the main voice.
+  hexdump: {
+    description: 'Raw bytes. Punctuation sounds, and tool calls lead.',
+    patch: {
+      minIntervalMs: 30,
+      voices: {
+        text: {
+          toneMs: 26,
+          volume: 0.22,
+          material: 'ceramic',
+          touch: 'firm',
+          baseFrequency: 261.63,
+          reading: { kind: 'codepoint', span: 24, every: 2 },
+          pitch: { kind: 'chromatic', span: 12 }
+        },
+        thinking: {
+          toneMs: 34,
+          volume: 0.18,
+          material: 'wood',
+          touch: 'normal',
+          baseFrequency: 130.81,
+          reading: { kind: 'codepoint', span: 24, every: 3 },
+          pitch: { kind: 'chromatic', span: 12 }
+        },
+        tool: {
+          toneMs: 16,
+          volume: 0.26,
+          material: 'glass',
+          touch: 'firm',
+          baseFrequency: 523.25,
+          reading: { kind: 'codepoint', span: 32, every: 1 },
+          pitch: { kind: 'chromatic', span: 24 }
+        }
       }
     }
   }
