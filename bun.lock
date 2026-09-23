@@ -8,6 +8,7 @@
         "@flyingrobots/bijou-node": "^7.2.0",
         "@flyingrobots/bijou-tui": "^7.2.0",
         "esfuzz": "^0.3.1",
+        "rxjs": "^7.8.2",
         "ts-pattern": "^5.9.0",
         "zod": "^4.6.5",
       },
@@ -343,6 +344,8 @@
     "react-dom": ["react-dom@19.2.7", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.7" } }, "sha512-t0BRVXvbiE/o20Hfw669rLbMCDWtYZLvmJigy2f0MxsXF+71pxhR3xOkspmsO8h3ZlNzyibAmtCa3l4lYKk6gQ=="],
 
     "reflect": ["reflect@github:zaach/reflect.js#286bcd7", {}, "zaach-reflect.js-286bcd7", "sha512-0wgZSgeFRWA+XpuPjYVkinspiTYMcDjXRPLhEon4zDAvIbl+TIFym48/J0knOcpubR28PjazbnFj4vkIZYI30A=="],
+
+    "rxjs": ["rxjs@7.8.2", "", { "dependencies": { "tslib": "^2.1.0" } }, "sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA=="],
 
     "scheduler": ["scheduler@0.27.0", "", {}, "sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q=="],
 

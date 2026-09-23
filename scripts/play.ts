@@ -1,44 +1,49 @@
+import {
+  concat,
+  concatMap,
+  defer,
+  from,
+  ignoreElements,
+  map,
+  type Observable,
+  of,
+  tap,
+  timer
+} from 'rxjs'
 import type { BlipConfig, StreamKind } from '../src/config.ts'
-import { pitchFromCharacter } from '../src/pitch.ts'
-import type { VoicedPlayer } from '../src/player.ts'
+import { play, playback } from '../src/player.ts'
+import { type Blip, tonesFrom } from '../src/stream.ts'
 
-export const sleep = (ms: number): Promise<void> => {
-  const { promise, resolve } = Promise.withResolvers<void>()
-  setTimeout(resolve, ms)
-  return promise
-}
+/** How long the device stays open after the last character, in tone lengths. */
+const TAIL = 6
 
-/** Feed a phrase through the real pitch path at streaming speed. */
-export const playText = async (
-  player: VoicedPlayer,
+/** A text as a character stream, one character every `delayMs`. */
+export const characters = (text: string, delayMs: number): Observable<string> =>
+  from(text).pipe(concatMap((char) => timer(delayMs).pipe(map(() => char))))
+
+/**
+ * Feed a phrase through the same pitch path and backend the extension uses.
+ * The observable is the whole run: subscribing starts it, unsubscribing stops
+ * it, and it completes once the last tone has rung out.
+ */
+export const playText = (
   config: BlipConfig,
   kind: StreamKind,
   text: string,
-  onBlip?: (char: string, frequency: number) => void
-): Promise<void> => {
-  const voice = config.voices[kind]
-  let pending = 0
+  onBlip?: (blip: Blip) => void
+): Observable<never> =>
+  defer(() => {
+    const voice = config.voices[kind]
+    const blips = characters(text, config.minIntervalMs).pipe(
+      tonesFrom(of({ voice, minIntervalMs: config.minIntervalMs })),
+      tap((blip) => onBlip?.(blip))
+    )
 
-  for (const char of text) {
-    // Same rule as the extension: only a pitched character spends the budget.
-    const frequency = pitchFromCharacter(char, voice)
-    if (frequency !== undefined) {
-      pending += 1
-      if (pending >= voice.charsPerBlip) {
-        pending = 0
-        onBlip?.(char, frequency)
-        player.play(kind, {
-          frequency,
-          toneMs: voice.toneMs,
-          decay: voice.decay,
-          material: voice.material,
-          touch: voice.touch,
-          volume: voice.volume
-        })
-      }
-    }
-    await sleep(config.minIntervalMs)
-  }
+    // The tail holds the device open while the last tone decays.
+    const commands = concat(
+      blips.pipe(map(({ tone }) => play(tone))),
+      timer(voice.toneMs * TAIL).pipe(ignoreElements())
+    )
 
-  await sleep(voice.toneMs * 6)
-}
+    return playback(of({ backend: config.backend, muted: false }), commands)
+  })

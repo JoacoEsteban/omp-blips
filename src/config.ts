@@ -7,7 +7,7 @@ import type { Material, Touch } from './synth.ts'
  * - `afplay`: macOS built-in, one process per tone, ~50 ms spawn latency.
  * - `ffplay`: long-lived PCM sink, near-zero latency and real mixing, needs ffmpeg.
  */
-export type Backend = 'afplay' | 'ffplay'
+export type BackendName = 'afplay' | 'ffplay'
 
 /** Which part of the assistant stream a blip came from. */
 export type StreamKind = 'text' | 'thinking' | 'tool'
@@ -41,7 +41,7 @@ export interface BlipConfig {
   /** Floor between two blips of any kind; faster streams get thinned out instead of stacked. */
   readonly minIntervalMs: number
   /** Which playback backend to use. */
-  readonly backend: Backend
+  readonly backend: BackendName
   readonly voices: Record<StreamKind, VoiceConfig>
 }
 
@@ -53,7 +53,7 @@ export type VoicePatch = {
 /** A partial config: presets and config files are both this shape. */
 export interface ConfigPatch {
   readonly minIntervalMs?: number | undefined
-  readonly backend?: Backend | undefined
+  readonly backend?: BackendName | undefined
   readonly voices?:
     { readonly [K in StreamKind]?: VoicePatch | undefined } | undefined
 }

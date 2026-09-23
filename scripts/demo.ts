@@ -2,9 +2,9 @@
  * Plays a phrase through the real pitch + player path, at streaming speed.
  * Usage: bun run scripts/demo.ts "text" [text|thinking|tool] [afplay|ffplay] [wrap|fold] [preset] [material] [touch]
  */
+import { lastValueFrom } from 'rxjs'
 import { match } from 'ts-pattern'
-import type { Backend, StreamKind } from '../src/config.ts'
-import { createPlayer } from '../src/player.ts'
+import type { BackendName, StreamKind } from '../src/config.ts'
 import { presetNames } from '../src/presets.ts'
 import { loadSettings } from '../src/settings.ts'
 import type { Material, Touch } from '../src/synth.ts'
@@ -29,7 +29,7 @@ const {
   sources,
   problems
 } = loadSettings(process.cwd(), preset)
-const backend: Backend = match(process.argv[4])
+const backend: BackendName = match(process.argv[4])
   .with('afplay', 'ffplay', (name) => name)
   .otherwise(() => loaded.backend)
 const mapping = match(process.argv[5])
@@ -47,7 +47,6 @@ const config = {
   backend,
   voices: { ...loaded.voices, [kind]: voice }
 }
-const player = createPlayer(config)
 
 console.log(
   `preset: ${used}, backend: ${backend}, voice: ${kind}, mapping: ${voice.mapping}, material: ${voice.material}, touch: ${voice.touch}`
@@ -56,7 +55,9 @@ const sourceLabel = sources.join(', ') || 'defaults'
 console.log(`settings: ${sourceLabel}`)
 for (const problem of problems) console.log(`problem: ${problem}`)
 
-await playText(player, config, kind, text, (char, frequency) =>
-  console.log(`${char} -> ${frequency.toFixed(1)} Hz`)
+await lastValueFrom(
+  playText(config, kind, text, ({ char, tone }) => {
+    console.log(`${char} -> ${tone.frequency.toFixed(1)} Hz`)
+  }),
+  { defaultValue: undefined }
 )
-player.dispose()

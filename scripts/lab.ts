@@ -3,13 +3,25 @@ import { chalkStyle, startApp } from '@flyingrobots/bijou-node'
 import { isKeyMsg, quit, type App, type Cmd } from '@flyingrobots/bijou-tui'
 import { generate, render } from 'esfuzz'
 import { loremIpsum } from 'lorem-ipsum'
+import {
+  BehaviorSubject,
+  distinctUntilChanged,
+  EMPTY,
+  interval,
+  map,
+  type Observable,
+  of,
+  share,
+  Subject,
+  switchMap
+} from 'rxjs'
 import { match } from 'ts-pattern'
-import type { BlipConfig } from '../src/config.ts'
-import { pitchFromCharacter } from '../src/pitch.ts'
-import type { Player, Tone } from '../src/player.ts'
-import { createFfplayPlayer } from '../src/players/ffplay.ts'
+import type { BlipConfig, VoiceConfig } from '../src/config.ts'
+import { play } from '../src/player.ts'
+import { ffplay } from '../src/players/ffplay.ts'
 import { type PresetName, presetNames, presets } from '../src/presets.ts'
 import { loadSettings } from '../src/settings.ts'
+import { tonesFrom, type Voicing } from '../src/stream.ts'
 import type { Material } from '../src/synth.ts'
 
 const DEFAULT_STREAM_DELAY_MS = 10
@@ -39,47 +51,90 @@ interface Model {
   readonly proseSample: string
   readonly callSample: string
   readonly callError: string
-  readonly pending: number
   readonly streamSpeedIndex: number
   readonly streamOffset: number
   readonly streamed: string
   readonly paused: boolean
-  readonly streamScheduled: boolean
 }
 
 type Msg = { readonly type: 'stream-character' }
 
-interface AuditionPlayer {
-  readonly configure: (config: BlipConfig) => void
-  readonly play: (tone: Tone) => void
-  readonly dispose: () => void
+/** How fast characters leave the sample, and whether they leave at all. */
+interface Clock {
+  readonly paused: boolean
+  readonly delayMs: number
+}
+
+/**
+ * Every effect of the lab, as one running graph: a clock that produces
+ * characters, and the blip pipeline of the extension behind a live `ffplay`.
+ * The application below stays a pure `[model, commands]` fold on top of it.
+ */
+interface Lab {
+  /** One message per character, at the current speed. */
+  readonly ticks: Observable<Msg>
+  readonly setClock: (clock: Clock) => void
+  /** Change the voice. The blip count starts again from zero. */
+  readonly setVoicing: (voicing: Voicing) => void
+  readonly emit: (char: string) => void
+  readonly stop: () => void
+}
+
+const createLab = (initial: Voicing): Lab => {
+  const clock = new BehaviorSubject<Clock>({
+    paused: false,
+    delayMs: DEFAULT_STREAM_DELAY_MS
+  })
+  const voicing = new BehaviorSubject<Voicing>(initial)
+  const characters = new Subject<string>()
+
+  const ticks = clock.pipe(
+    distinctUntilChanged(
+      (left, right) =>
+        left.paused === right.paused && left.delayMs === right.delayMs
+    ),
+    switchMap((current) =>
+      match(current.paused)
+        .with(true, () => EMPTY)
+        .with(false, () => interval(current.delayMs))
+        .exhaustive()
+    ),
+    map((): Msg => ({ type: 'stream-character' }))
+  )
+
+  const commands = voicing.pipe(
+    switchMap((current) => characters.pipe(tonesFrom(of(current)))),
+    map(({ tone }) => play(tone)),
+    share({
+      resetOnRefCountZero: false,
+      resetOnComplete: false,
+      resetOnError: false
+    })
+  )
+
+  // The lab keeps its device for the whole session: a pause is silence, not a
+  // reason to give the process back.
+  const audio = ffplay({ idleMs: Number.POSITIVE_INFINITY })(
+    commands
+  ).subscribe()
+
+  return {
+    ticks,
+    setClock: (next) => clock.next(next),
+    setVoicing: (next) => voicing.next(next),
+    emit: (char) => characters.next(char),
+    stop: () => {
+      audio.unsubscribe()
+      characters.complete()
+      voicing.complete()
+      clock.complete()
+    }
+  }
 }
 
 interface GeneratedCall {
   readonly sample: string
   readonly error: string
-}
-
-const createAuditionPlayer = (initial: BlipConfig): AuditionPlayer => {
-  const player: Player = createFfplayPlayer({
-    idleMs: Number.POSITIVE_INFINITY
-  })
-  let minIntervalMs = initial.minIntervalMs
-  let lastPlayedAt = 0
-
-  return {
-    configure: (config) => {
-      minIntervalMs = config.minIntervalMs
-      lastPlayedAt = 0
-    },
-    play: (tone) => {
-      const now = performance.now()
-      if (now - lastPlayedAt < minIntervalMs) return
-      lastPlayedAt = now
-      player.play(tone)
-    },
-    dispose: () => player.dispose()
-  }
 }
 
 const configFor = (preset: PresetName, material: Material): BlipConfig => {
@@ -130,35 +185,90 @@ const speedIndexForDelay = (delayMs: number): number =>
 
 const DEFAULT_STREAM_SPEED_INDEX = speedIndexForDelay(DEFAULT_STREAM_DELAY_MS)
 
-const streamCmd =
-  (delayMs: number): Cmd<Msg> =>
-  (emit, capabilities) => {
-    const sleep = (ms: number): Promise<void> => {
-      if (capabilities.sleep !== undefined) return capabilities.sleep(ms)
-      const { promise, resolve } = Promise.withResolvers<void>()
-      setTimeout(resolve, ms)
-      return promise
-    }
-
-    void sleep(delayMs).then(() => {
-      emit({ type: 'stream-character' })
+/** Bridge a stream of messages into the application loop for as long as it runs. */
+const listen =
+  (source: Observable<Msg>): Cmd<Msg> =>
+  (emit) => {
+    const subscription = source.subscribe((msg) => {
+      emit(msg)
     })
+    return () => {
+      subscription.unsubscribe()
+    }
+  }
+
+/** A command that only touches the running graph. */
+const effect =
+  (run: () => void): Cmd<Msg> =>
+  () => {
+    run()
     return undefined
   }
 
-const configureCmd =
-  (player: AuditionPlayer, config: BlipConfig): Cmd<Msg> =>
-  () => {
-    player.configure(config)
-    return undefined
-  }
+const sampleFor = (model: Model): string =>
+  match(model.mode)
+    .with('prose', () => model.proseSample)
+    .with('call', () => model.callSample)
+    .exhaustive()
 
-const playCmd =
-  (player: AuditionPlayer, tone: Tone): Cmd<Msg> =>
-  () => {
-    player.play(tone)
-    return undefined
+const voiceFor = (model: Model): VoiceConfig =>
+  match(model.mode)
+    .with('prose', () => model.config.voices.text)
+    .with('call', () => model.config.voices.tool)
+    .exhaustive()
+
+const voicingFor = (model: Model): Voicing => {
+  const voice = voiceFor(model)
+  return {
+    voice: match(voice.enabled)
+      .with(true, () => voice)
+      .with(false, () => undefined)
+      .exhaustive(),
+    minIntervalMs: model.config.minIntervalMs
   }
+}
+
+/** Nothing to read, or nothing to read from: either way the clock stops. */
+const clockFor = (model: Model): Clock => ({
+  paused:
+    model.paused ||
+    sampleFor(model).length === 0 ||
+    (model.mode === 'call' && model.callError.length > 0),
+  delayMs: streamDelayMs(model.streamSpeedIndex)
+})
+
+/** Hand the model's clock to the graph. Every update ends in one of these. */
+const timed = (lab: Lab, model: Model): [Model, Cmd<Msg>[]] => [
+  model,
+  [effect(() => lab.setClock(clockFor(model)))]
+]
+
+/** The voice changed: retune the graph and start a fresh blip count. */
+const tuned = (lab: Lab, model: Model): [Model, Cmd<Msg>[]] => [
+  model,
+  [
+    effect(() => lab.setVoicing(voicingFor(model))),
+    effect(() => lab.setClock(clockFor(model)))
+  ]
+]
+
+const wrapPreview = (text: string, width: number): string[] => {
+  const lineWidth = Math.max(1, width)
+  const lines: string[] = []
+  for (const line of text.split('\n')) {
+    if (line.length === 0) {
+      lines.push('')
+      continue
+    }
+    let remaining = line
+    while (remaining.length > lineWidth) {
+      lines.push(remaining.slice(0, lineWidth))
+      remaining = remaining.slice(lineWidth)
+    }
+    lines.push(remaining)
+  }
+  return lines
+}
 
 const choiceLine = <Value extends string>(
   label: string,
@@ -179,87 +289,85 @@ const speedSlider = (speedIndex: number): string => {
   return `${accent('speed'.padEnd(10))}${muted('slow 1000 ms')} ${selected(`${'━'.repeat(filled)}●${'━'.repeat(12 - filled)}`)} ${muted('1 ms fast')}  ${String(streamDelayMs(speedIndex))} ms`
 }
 
-const sampleFor = (model: Model): string =>
-  match(model.mode)
-    .with('prose', () => model.proseSample)
-    .with('call', () => model.callSample)
-    .exhaustive()
-
-const voiceFor = (model: Model): BlipConfig['voices']['text'] =>
-  match(model.mode)
-    .with('prose', () => model.config.voices.text)
-    .with('call', () => model.config.voices.tool)
-    .exhaustive()
-
-const wrapPreview = (text: string, width: number): string[] => {
-  const lineWidth = Math.max(1, width)
-  const lines: string[] = []
-  for (const line of text.split('\n')) {
-    if (line.length === 0) {
-      lines.push('')
-      continue
-    }
-    let remaining = line
-    while (remaining.length > lineWidth) {
-      lines.push(remaining.slice(0, lineWidth))
-      remaining = remaining.slice(lineWidth)
-    }
-    lines.push(remaining)
-  }
-  return lines
-}
-
-const scheduleIfNeeded = (model: Model): [Model, Cmd<Msg>[]] => {
-  if (
-    model.paused ||
-    model.streamScheduled ||
-    sampleFor(model).length === 0 ||
-    (model.mode === 'call' && model.callError.length > 0)
-  ) {
-    return [model, []]
-  }
-  return [
-    { ...model, streamScheduled: true },
-    [streamCmd(streamDelayMs(model.streamSpeedIndex))]
-  ]
-}
 const modeIndex = (mode: StreamMode): number =>
   match(mode)
     .with('prose', () => 0)
     .with('call', () => 1)
     .exhaustive()
 
-const previewFor = (model: Model): string[] => {
-  if (model.streamed.length > 0) return wrapPreview(model.streamed, model.width)
-  return [muted('waiting for text…')]
+const previewFor = (model: Model): string[] =>
+  match(model.streamed.length > 0)
+    .with(true, () => wrapPreview(model.streamed, model.width))
+    .with(false, () => [muted('waiting for text…')])
+    .exhaustive()
+
+/** The sample ran out: start the next one, keeping the preview continuous. */
+const restarted = (model: Model, previewLimit: number): Model =>
+  match(model.mode)
+    .with('prose', () => ({
+      ...model,
+      proseSample: generateProseSample(),
+      streamOffset: 0,
+      streamed: `${model.streamed}\n`.slice(-previewLimit)
+    }))
+    .with('call', () => {
+      const call = generateCallSample(model.callSample)
+      return match(call.error.length > 0)
+        .with(true, () => ({ ...model, callError: call.error }))
+        .with(false, () => ({
+          ...model,
+          callSample: call.sample,
+          callError: '',
+          streamOffset: 0,
+          streamed: `${model.streamed}\n`.slice(-previewLimit)
+        }))
+        .exhaustive()
+    })
+    .exhaustive()
+
+const withPreset = (model: Model, delta: number): Model => {
+  const presetIndex = cycle(model.presetIndex, delta, presetNames.length)
+  const preset = presetNames[presetIndex] ?? 'default'
+  const material = MATERIALS[model.materialIndex] ?? 'ceramic'
+  return { ...model, presetIndex, config: configFor(preset, material) }
 }
 
+const withMaterial = (model: Model, delta: number): Model => {
+  const materialIndex = cycle(model.materialIndex, delta, MATERIALS.length)
+  const preset = presetNames[model.presetIndex] ?? 'default'
+  const material = MATERIALS[materialIndex] ?? 'ceramic'
+  return { ...model, materialIndex, config: configFor(preset, material) }
+}
+
+const rewound = (model: Model): Model => ({
+  ...model,
+  streamOffset: 0,
+  streamed: ''
+})
+
 const createLabApp = (
-  player: AuditionPlayer,
+  lab: Lab,
   initialConfig: BlipConfig
 ): App<Model, Msg> => ({
   init: () => {
     const call = generateCallSample('')
-    return [
-      {
-        width: DEFAULT_WIDTH,
-        height: DEFAULT_HEIGHT,
-        presetIndex: 0,
-        materialIndex: MATERIALS.indexOf(initialConfig.voices.text.material),
-        config: initialConfig,
-        mode: 'prose',
-        proseSample: generateProseSample(),
-        callSample: call.sample,
-        callError: call.error,
-        pending: 0,
-        streamSpeedIndex: DEFAULT_STREAM_SPEED_INDEX,
-        streamOffset: 0,
-        streamed: '',
-        paused: false,
-        streamScheduled: true
-      },
-      [streamCmd(streamDelayMs(DEFAULT_STREAM_SPEED_INDEX))]
-    ]
+    const model: Model = {
+      width: DEFAULT_WIDTH,
+      height: DEFAULT_HEIGHT,
+      presetIndex: 0,
+      materialIndex: MATERIALS.indexOf(initialConfig.voices.text.material),
+      config: initialConfig,
+      mode: 'prose',
+      proseSample: generateProseSample(),
+      callSample: call.sample,
+      callError: call.error,
+      streamSpeedIndex: DEFAULT_STREAM_SPEED_INDEX,
+      streamOffset: 0,
+      streamed: '',
+      paused: false
+    }
+    const [tunedModel, commands] = tuned(lab, model)
+    return [tunedModel, [listen(lab.ticks), ...commands]]
   },
 
   update: (msg, model) =>
@@ -269,124 +377,66 @@ const createLabApp = (
           .returnType<[Model, Cmd<Msg>[]]>()
           .with({ ctrl: true, key: 'c' }, () => [model, [quit<Msg>()]])
           .with({ key: 'q' }, () => [model, [quit<Msg>()]])
-          .with({ key: 'space' }, (): [Model, Cmd<Msg>[]] =>
-            scheduleIfNeeded({ ...model, paused: !model.paused })
+          .with({ key: 'space' }, () =>
+            timed(lab, { ...model, paused: !model.paused })
           )
-          .with({ key: 'tab' }, (): [Model, Cmd<Msg>[]] => {
-            const mode = match(model.mode)
-              .with('prose', () => 'call' as const)
-              .with('call', () => 'prose' as const)
-              .exhaustive()
-            return scheduleIfNeeded({
-              ...model,
-              mode,
-              pending: 0,
-              streamOffset: 0,
-              streamed: ''
-            })
-          })
-          .with({ key: 'r' }, (): [Model, Cmd<Msg>[]] => {
-            if (model.mode === 'prose') {
-              return scheduleIfNeeded({
+          .with({ key: 'tab' }, () =>
+            tuned(
+              lab,
+              rewound({
                 ...model,
-                proseSample: generateProseSample(),
-                pending: 0,
-                streamOffset: 0,
-                streamed: ''
+                mode: match(model.mode)
+                  .with('prose', () => 'call' as const)
+                  .with('call', () => 'prose' as const)
+                  .exhaustive()
               })
-            }
-            const call = generateCallSample(model.callSample)
-            return scheduleIfNeeded({
-              ...model,
-              callSample: call.sample,
-              callError: call.error,
-              pending: 0,
-              streamOffset: 0,
-              streamed: ''
-            })
-          })
-          .with({ key: '[' }, (): [Model, Cmd<Msg>[]] => [
-            {
+            )
+          )
+          .with({ key: 'r' }, () =>
+            tuned(
+              lab,
+              rewound(
+                match(model.mode)
+                  .with('prose', () => ({
+                    ...model,
+                    proseSample: generateProseSample()
+                  }))
+                  .with('call', () => {
+                    const call = generateCallSample(model.callSample)
+                    return {
+                      ...model,
+                      callSample: call.sample,
+                      callError: call.error
+                    }
+                  })
+                  .exhaustive()
+              )
+            )
+          )
+          .with({ key: '[' }, () =>
+            timed(lab, {
               ...model,
               streamSpeedIndex: clamp(
                 model.streamSpeedIndex - 1,
                 0,
                 STREAM_SPEED_JUMPS
               )
-            },
-            []
-          ])
-          .with({ key: ']' }, (): [Model, Cmd<Msg>[]] => [
-            {
+            })
+          )
+          .with({ key: ']' }, () =>
+            timed(lab, {
               ...model,
               streamSpeedIndex: clamp(
                 model.streamSpeedIndex + 1,
                 0,
                 STREAM_SPEED_JUMPS
               )
-            },
-            []
-          ])
-          .with({ key: 'left' }, (): [Model, Cmd<Msg>[]] => {
-            const presetIndex = cycle(model.presetIndex, -1, presetNames.length)
-            const preset = presetNames[presetIndex] ?? 'default'
-            const material = MATERIALS[model.materialIndex] ?? 'ceramic'
-            const config = configFor(preset, material)
-            const [next, commands] = scheduleIfNeeded({
-              ...model,
-              presetIndex,
-              config,
-              pending: 0
             })
-            return [next, [configureCmd(player, config), ...commands]]
-          })
-          .with({ key: 'right' }, (): [Model, Cmd<Msg>[]] => {
-            const presetIndex = cycle(model.presetIndex, 1, presetNames.length)
-            const preset = presetNames[presetIndex] ?? 'default'
-            const material = MATERIALS[model.materialIndex] ?? 'ceramic'
-            const config = configFor(preset, material)
-            const [next, commands] = scheduleIfNeeded({
-              ...model,
-              presetIndex,
-              config,
-              pending: 0
-            })
-            return [next, [configureCmd(player, config), ...commands]]
-          })
-          .with({ key: 'up' }, (): [Model, Cmd<Msg>[]] => {
-            const materialIndex = cycle(
-              model.materialIndex,
-              -1,
-              MATERIALS.length
-            )
-            const preset = presetNames[model.presetIndex] ?? 'default'
-            const material = MATERIALS[materialIndex] ?? 'ceramic'
-            const config = configFor(preset, material)
-            const [next, commands] = scheduleIfNeeded({
-              ...model,
-              materialIndex,
-              config,
-              pending: 0
-            })
-            return [next, [configureCmd(player, config), ...commands]]
-          })
-          .with({ key: 'down' }, (): [Model, Cmd<Msg>[]] => {
-            const materialIndex = cycle(
-              model.materialIndex,
-              1,
-              MATERIALS.length
-            )
-            const preset = presetNames[model.presetIndex] ?? 'default'
-            const material = MATERIALS[materialIndex] ?? 'ceramic'
-            const config = configFor(preset, material)
-            const [next, commands] = scheduleIfNeeded({
-              ...model,
-              materialIndex,
-              config,
-              pending: 0
-            })
-            return [next, [configureCmd(player, config), ...commands]]
-          })
+          )
+          .with({ key: 'left' }, () => tuned(lab, withPreset(model, -1)))
+          .with({ key: 'right' }, () => tuned(lab, withPreset(model, 1)))
+          .with({ key: 'up' }, () => tuned(lab, withMaterial(model, -1)))
+          .with({ key: 'down' }, () => tuned(lab, withMaterial(model, 1)))
           .otherwise(() => [model, []])
       )
       .with({ type: 'resize' }, (resize): [Model, Cmd<Msg>[]] => [
@@ -394,70 +444,23 @@ const createLabApp = (
         []
       ])
       .with({ type: 'stream-character' }, (): [Model, Cmd<Msg>[]] => {
-        const ready = { ...model, streamScheduled: false }
-        if (
-          ready.paused ||
-          (ready.mode === 'call' && ready.callError.length > 0)
-        ) {
-          return [ready, []]
-        }
-        const sample = sampleFor(ready)
-        if (sample.length === 0) return [ready, []]
+        const sample = sampleFor(model)
+        if (sample.length === 0) return timed(lab, model)
 
-        const char = sample[ready.streamOffset] ?? ''
-        const previewLimit = Math.max(1, ready.width * ready.height * 2)
-        const pending = ready.pending + 1
-        const baseNext = {
-          ...ready,
-          streamed: `${ready.streamed}${char}`.slice(-previewLimit),
-          pending,
-          streamOffset: ready.streamOffset + 1
+        const char = sample[model.streamOffset] ?? ''
+        const previewLimit = Math.max(1, model.width * model.height * 2)
+        const advanced = {
+          ...model,
+          streamed: `${model.streamed}${char}`.slice(-previewLimit),
+          streamOffset: model.streamOffset + 1
         }
-        const reachedEnd = baseNext.streamOffset >= sample.length
-        const next = match(reachedEnd)
-          .with(false, () => baseNext)
-          .with(true, () =>
-            match(ready.mode)
-              .with('prose', () => ({
-                ...baseNext,
-                proseSample: generateProseSample(),
-                streamOffset: 0,
-                streamed: `${baseNext.streamed}\n`.slice(-previewLimit)
-              }))
-              .with('call', () => {
-                const call = generateCallSample(ready.callSample)
-                if (call.error.length > 0) {
-                  return { ...baseNext, callError: call.error }
-                }
-                return {
-                  ...baseNext,
-                  callSample: call.sample,
-                  callError: '',
-                  streamOffset: 0,
-                  streamed: `${baseNext.streamed}\n`.slice(-previewLimit)
-                }
-              })
-              .exhaustive()
-          )
+        const next = match(advanced.streamOffset >= sample.length)
+          .with(false, () => advanced)
+          .with(true, () => restarted(advanced, previewLimit))
           .exhaustive()
-        const voice = voiceFor(ready)
-        if (!voice.enabled || pending < voice.charsPerBlip) {
-          return scheduleIfNeeded(next)
-        }
 
-        const withPending = { ...next, pending: 0 }
-        const frequency = pitchFromCharacter(char, voice)
-        if (frequency === undefined) return scheduleIfNeeded(withPending)
-        const play = playCmd(player, {
-          frequency,
-          toneMs: voice.toneMs,
-          decay: voice.decay,
-          material: voice.material,
-          touch: voice.touch,
-          volume: voice.volume
-        })
-        const [scheduled, commands] = scheduleIfNeeded(withPending)
-        return [scheduled, [play, ...commands]]
+        const [timedModel, commands] = timed(lab, next)
+        return [timedModel, [effect(() => lab.emit(char)), ...commands]]
       })
       .otherwise((): [Model, Cmd<Msg>[]] => [model, []]),
 
@@ -502,10 +505,13 @@ const createLabApp = (
 
 const initialMaterial: Material = 'ceramic'
 const initialConfig = configFor('default', initialMaterial)
-const player = createAuditionPlayer(initialConfig)
+const lab = createLab({
+  voice: initialConfig.voices.text,
+  minIntervalMs: initialConfig.minIntervalMs
+})
 
 try {
-  await startApp(createLabApp(player, initialConfig))
+  await startApp(createLabApp(lab, initialConfig))
 } finally {
-  player.dispose()
+  lab.stop()
 }

@@ -123,22 +123,28 @@ export const loadSettings = (
   cwd: string,
   preset?: PresetName
 ): LoadedSettings => {
-  const sources: string[] = []
-  const problems: string[] = []
-
-  const patches = settingsPaths(cwd)
+  const read = settingsPaths(cwd)
     .filter((path) => existsSync(path))
-    .flatMap((path) =>
-      match(readSettings(path))
-        .with(P.string, (problem) => {
-          problems.push(problem)
-          return []
-        })
-        .otherwise((patch) => {
-          sources.push(path)
-          return [patch]
-        })
-    )
+    .map((path) => ({ path, result: readSettings(path) }))
+
+  const { sources, problems, patches } = read.reduce<{
+    readonly sources: readonly string[]
+    readonly problems: readonly string[]
+    readonly patches: readonly BlipSettings[]
+  }>(
+    (collected, { path, result }) =>
+      match(result)
+        .with(P.string, (problem) => ({
+          ...collected,
+          problems: [...collected.problems, problem]
+        }))
+        .otherwise((patch) => ({
+          ...collected,
+          sources: [...collected.sources, path],
+          patches: [...collected.patches, patch]
+        })),
+    { sources: [], problems: [], patches: [] }
+  )
 
   const name =
     preset ??

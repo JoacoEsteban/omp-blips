@@ -32,22 +32,53 @@ The modal synthesizer combines several resonant modes for each material. It adds
 
 The synthesizer renders each sound as mono PCM. It keeps rendered sounds in memory. The `afplay` backend also writes each sound to a WAV file cache.
 
+## Streams
+
+The extension is one observable graph. RxJS holds the parts together, and each part is a function of
+its input.
+
+`src/events.ts` is the only file that speaks to the host. It makes a stream from each callback: the
+start of a session, the deltas of the assistant, the end of a message, the shutdown, and each
+`/blips` call.
+
+The state of a session is a fold over those streams. `src/session.ts` holds the reducer. It takes a
+session and an event, and it returns the next session. It changes nothing in place.
+`src/commands.ts` holds the one step that reads from disk: `reload`, `preset`, and `where` read the
+configuration files. What they read becomes the event that the reducer gets.
+
+`src/stream.ts` makes blips from the deltas. It groups the chunks by stream kind, so each voice
+counts its own characters. One fold for each group counts the sounded characters and makes the tone.
+A pace operator then drops the tones that come inside `minIntervalMs`.
+
+`src/player.ts` maps the session to one device. A different backend, or a mute of all three voices,
+closes the process that runs. The next state opens the device that it asks for.
+
+`src/players/mixer.ts` is the mix as a fold. Play, flush, and clock events go in, and blocks of PCM
+come out. The state is a value, so the same events always give the same audio.
+`src/players/ffplay.ts` writes those blocks to the process.
+
+A subscription starts the audio, and the end of the subscription stops it. The `session_shutdown`
+event completes the graph, so no process stays behind.
+
+The scripts use the same pipeline. The sound lab keeps a pure model-and-commands loop for the
+display, and it puts every effect in the graph.
+
 ## Modal synthesis
 
 Each stream selects a material and a touch. Material names evoke familiar objects, but they do not model physical materials. Touch settings change the attack, upper modes, and attack noise.
 
-| Material | Character |
-|---|---|
-| `wood` | Few modes with a short decay. |
-| `stone` | Dry low modes with sparse inharmonic upper resonances. |
-| `ceramic` | Bright modes with slight inharmonic spacing. |
-| `glass` | Bright upper modes with a long decay. |
+| Material  | Character                                              |
+| --------- | ------------------------------------------------------ |
+| `wood`    | Few modes with a short decay.                          |
+| `stone`   | Dry low modes with sparse inharmonic upper resonances. |
+| `ceramic` | Bright modes with slight inharmonic spacing.           |
+| `glass`   | Bright upper modes with a long decay.                  |
 
-| Touch | Character |
-|---|---|
-| `soft` | Slow attack, lower upper modes, and quiet noise. |
-| `normal` | Medium attack, balanced upper modes, and noise. |
-| `firm` | Fast attack, stronger upper modes, and more noise. |
+| Touch    | Character                                          |
+| -------- | -------------------------------------------------- |
+| `soft`   | Slow attack, lower upper modes, and quiet noise.   |
+| `normal` | Medium attack, balanced upper modes, and noise.    |
+| `firm`   | Fast attack, stronger upper modes, and more noise. |
 
 The default uses `ceramic` and `normal` for `text`, `wood` and `soft` for `thinking`, and `glass` and `soft` for `tool`. The settings are deterministic and do not vary between triggers.
 
@@ -80,15 +111,15 @@ provider failure has the same effect as a manual stop.
 A preset is a complete set of values for the three voices. The file `src/presets.ts` holds the
 presets. The default preset has the name `default`.
 
-| Preset | Sound |
-|---|---|
-| `default` | A melody for the text, a dark murmur for the reasoning, bright ticks for the tools. |
-| `arcade` | Fast small tones in a high range. A text crawl from a 1988 video game. |
-| `gamelan` | Struck ceramic and glass. The long tones continue and mix into a haze. |
-| `sonar` | A submarine. One slow low ping after each few words. |
-| `typewriter` | Mechanical keys. The pitch changes very little, so you hear rhythm. |
-| `music-box` | A wind-up music box. High, sweet, and in small steps. |
-| `quiet` | Background sound. Text only, low volume, large spaces between the blips. |
+| Preset       | Sound                                                                               |
+| ------------ | ----------------------------------------------------------------------------------- |
+| `default`    | A melody for the text, a dark murmur for the reasoning, bright ticks for the tools. |
+| `arcade`     | Fast small tones in a high range. A text crawl from a 1988 video game.              |
+| `gamelan`    | Struck ceramic and glass. The long tones continue and mix into a haze.              |
+| `sonar`      | A submarine. One slow low ping after each few words.                                |
+| `typewriter` | Mechanical keys. The pitch changes very little, so you hear rhythm.                 |
+| `music-box`  | A wind-up music box. High, sweet, and in small steps.                               |
+| `quiet`      | Background sound. Text only, low volume, large spaces between the blips.            |
 
 To hear all presets one after the other, run `mise run audition`.
 
@@ -108,11 +139,11 @@ ends. To see the list of names, run `/blips presets`.
 
 These values are the values of the preset `default`. Another preset gives other values.
 
-| Stream | Lowest pitch | Range | Scale | Mapping | Material | Touch | Sound |
-|---|---|---|---|---|---|---|---|
-| `text` | 220 Hz | 3 octaves | major pentatonic | `wrap` | ceramic | normal | the melody that you follow |
-| `thinking` | 147 Hz | 2 octaves | minor pentatonic | `fold` | wood | soft | a dark murmur below the text |
-| `tool` | 523 Hz | 2 octaves | major pentatonic | `wrap` | glass | soft | short bright ticks |
+| Stream     | Lowest pitch | Range     | Scale            | Mapping | Material | Touch  | Sound                        |
+| ---------- | ------------ | --------- | ---------------- | ------- | -------- | ------ | ---------------------------- |
+| `text`     | 220 Hz       | 3 octaves | major pentatonic | `wrap`  | ceramic  | normal | the melody that you follow   |
+| `thinking` | 147 Hz       | 2 octaves | minor pentatonic | `fold`  | wood     | soft   | a dark murmur below the text |
+| `tool`     | 523 Hz       | 2 octaves | major pentatonic | `wrap`  | glass    | soft   | short bright ticks           |
 
 The `tool` voice makes fewer blips than the other two voices. Tool arguments are JSON and contain
 many characters.
@@ -123,13 +154,13 @@ The file `src/scales.ts` holds the scales. Each scale has five or six notes in o
 
 Pentatonic scales avoid many close semitone steps. Modal partials can still add inharmonic intervals.
 
-| Scale | Sound |
-|---|---|
-| `MAJOR_PENTATONIC` | Bright and neutral. |
-| `MINOR_PENTATONIC` | The same shape, but darker. |
-| `HIRAJOSHI` | Japanese. Metallic, like a bell. |
-| `KUMOI` | Softer than hirajoshi. The color of a music box. |
-| `BLUES` | Restless. It contains the flat fifth. |
+| Scale              | Sound                                            |
+| ------------------ | ------------------------------------------------ |
+| `MAJOR_PENTATONIC` | Bright and neutral.                              |
+| `MINOR_PENTATONIC` | The same shape, but darker.                      |
+| `HIRAJOSHI`        | Japanese. Metallic, like a bell.                 |
+| `KUMOI`            | Softer than hirajoshi. The color of a music box. |
+| `BLUES`            | Restless. It contains the flat fifth.            |
 
 A configuration file gives a scale as an array of semitone numbers. The value `[0, 2, 4, 7, 9]` is
 the major pentatonic scale.
@@ -202,18 +233,18 @@ To remove the symbolic link, run `mise run unlink`.
 
 ## Commands
 
-| Command | Result |
-|---|---|
-| `/blips` | Stops all voices. If all voices are off, it starts all voices. |
-| `/blips on` | Starts all voices. |
-| `/blips off` | Stops all voices. |
-| `/blips text` | Starts or stops the voice for the answer text. |
-| `/blips thinking` | Starts or stops the voice for the reasoning. |
-| `/blips tool` | Starts or stops the voice for the tool arguments. |
-| `/blips presets` | Shows the list of presets. |
-| `/blips preset <name>` | Uses this preset until the session ends. |
-| `/blips reload` | Reads the configuration files again. A restart is not necessary. It keeps the voices that you started or stopped. |
-| `/blips where` | Shows the paths of the configuration files. |
+| Command                | Result                                                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `/blips`               | Stops all voices. If all voices are off, it starts all voices.                                                    |
+| `/blips on`            | Starts all voices.                                                                                                |
+| `/blips off`           | Stops all voices.                                                                                                 |
+| `/blips text`          | Starts or stops the voice for the answer text.                                                                    |
+| `/blips thinking`      | Starts or stops the voice for the reasoning.                                                                      |
+| `/blips tool`          | Starts or stops the voice for the tool arguments.                                                                 |
+| `/blips presets`       | Shows the list of presets.                                                                                        |
+| `/blips preset <name>` | Uses this preset until the session ends.                                                                          |
+| `/blips reload`        | Reads the configuration files again. A restart is not necessary. It keeps the voices that you started or stopped. |
+| `/blips where`         | Shows the paths of the configuration files.                                                                       |
 
 The command completes its arguments. Type `/blips ` and the dropdown shows each subcommand with
 its description. Type `/blips preset ` and it shows each preset name with its description. An
@@ -236,7 +267,13 @@ preset, then the first file, then the second file. A file gives only the keys th
   "backend": "ffplay",
   "minIntervalMs": 70,
   "voices": {
-    "thinking": { "charsPerBlip": 3, "volume": 0.4, "material": "wood", "touch": "soft", "mapping": "fold" },
+    "thinking": {
+      "charsPerBlip": 3,
+      "volume": 0.4,
+      "material": "wood",
+      "touch": "soft",
+      "mapping": "fold"
+    },
     "tool": { "enabled": false }
   }
 }
@@ -244,27 +281,27 @@ preset, then the first file, then the second file. A file gives only the keys th
 
 ### Keys
 
-| Key | Type | Function |
-|---|---|---|
-| `backend` | `"ffplay"` or `"afplay"` | The backend that plays the tones. |
-| `preset` | a preset name | The preset that gives the start values. |
-| `minIntervalMs` | number | The minimum time in milliseconds between two blips of the same voice. |
+| Key             | Type                     | Function                                                              |
+| --------------- | ------------------------ | --------------------------------------------------------------------- |
+| `backend`       | `"ffplay"` or `"afplay"` | The backend that plays the tones.                                     |
+| `preset`        | a preset name            | The preset that gives the start values.                               |
+| `minIntervalMs` | number                   | The minimum time in milliseconds between two blips of the same voice. |
 
 Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts these keys:
 
-| Key | Type | Function |
-|---|---|---|
-| `enabled` | boolean | Starts this voice at the start of a session. |
-| `charsPerBlip` | integer | The number of sounded characters for one blip. Silent characters do not count. |
-| `toneMs` | number | The length of one tone in milliseconds. |
-| `decay` | positive number | Multiplies the material's decay rate. Lower values ring longer. |
-| `volume` | number from 0 to 1 | The loudness of this voice. |
-| `material` | `"wood"`, `"stone"`, `"ceramic"`, or `"glass"` | The resonant material. |
-| `touch` | `"soft"`, `"normal"`, or `"firm"` | The attack and upper-mode strength. |
-| `baseFrequency` | number | The frequency in Hz of the lowest position in the scale. |
-| `scale` | array of numbers | The semitone positions of one octave of the scale. |
-| `octaves` | integer | The number of octaves for the range of characters. |
-| `mapping` | `"wrap"` or `"fold"` | The mapping from a character to a position in the scale. |
+| Key             | Type                                           | Function                                                                       |
+| --------------- | ---------------------------------------------- | ------------------------------------------------------------------------------ |
+| `enabled`       | boolean                                        | Starts this voice at the start of a session.                                   |
+| `charsPerBlip`  | integer                                        | The number of sounded characters for one blip. Silent characters do not count. |
+| `toneMs`        | number                                         | The length of one tone in milliseconds.                                        |
+| `decay`         | positive number                                | Multiplies the material's decay rate. Lower values ring longer.                |
+| `volume`        | number from 0 to 1                             | The loudness of this voice.                                                    |
+| `material`      | `"wood"`, `"stone"`, `"ceramic"`, or `"glass"` | The resonant material.                                                         |
+| `touch`         | `"soft"`, `"normal"`, or `"firm"`              | The attack and upper-mode strength.                                            |
+| `baseFrequency` | number                                         | The frequency in Hz of the lowest position in the scale.                       |
+| `scale`         | array of numbers                               | The semitone positions of one octave of the scale.                             |
+| `octaves`       | integer                                        | The number of octaves for the range of characters.                             |
+| `mapping`       | `"wrap"` or `"fold"`                           | The mapping from a character to a position in the scale.                       |
 
 The file `blips.example.json` shows material and touch keys with example values.
 
@@ -278,12 +315,12 @@ before stay in use. The extension never stops the session because of a configura
 
 ## Development
 
-| Command | Function |
-|---|---|
-| `mise run typecheck` | Examines the types with `tsc`. |
-| `mise run demo` | Plays a text through the pitch code and the backend. |
-| `mise run audition` | Plays the same text through every preset. |
-| `mise run lab` | Compares presets and materials with generated prose and code streams. |
+| Command              | Function                                                              |
+| -------------------- | --------------------------------------------------------------------- |
+| `mise run typecheck` | Examines the types with `tsc`.                                        |
+| `mise run demo`      | Plays a text through the pitch code and the backend.                  |
+| `mise run audition`  | Plays the same text through every preset.                             |
+| `mise run lab`       | Compares presets and materials with generated prose and code streams. |
 
 The demo command accepts seven arguments: the text, the voice, the backend, the mapping, the preset, the material, and the touch. Each argument after the text is optional.
 
@@ -297,15 +334,15 @@ The call sample is raw code, not a JSON tool-call payload. The lab never runs th
 Each mode generates a fresh sample when the current sample ends. Preset and material changes keep the current sample.
 The selected material applies to both voices. Switching modes restarts the selected sample and preserves the speed and pause state.
 
-| Key | Action |
-|---|---|
-| Tab | Switch between prose and call. |
-| `r` | Generate a new sample for the selected mode. |
-| Left / Right | Select a preset. |
-| Up / Down | Select a material. |
-| `[` / `]` | Decrease / increase the stream speed. |
-| Space | Pause or resume the stream. |
-| `q` | Exit the lab. |
+| Key          | Action                                       |
+| ------------ | -------------------------------------------- |
+| Tab          | Switch between prose and call.               |
+| `r`          | Generate a new sample for the selected mode. |
+| Left / Right | Select a preset.                             |
+| Up / Down    | Select a material.                           |
+| `[` / `]`    | Decrease / increase the stream speed.        |
+| Space        | Pause or resume the stream.                  |
+| `q`          | Exit the lab.                                |
 
 If code generation returns eight empty samples, the lab shows an error and stops the call stream.
 Press `r` to retry. The previous sample remains stored but does not repeat automatically.
