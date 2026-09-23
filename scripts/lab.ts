@@ -17,6 +17,7 @@ import {
 } from 'rxjs'
 import { match } from 'ts-pattern'
 import type { BlipConfig, VoiceConfig } from '../src/config.ts'
+import type { ColorConfig } from '../src/color.ts'
 import type { PitchConfig } from '../src/pitch.ts'
 import type { ReadingConfig } from '../src/reading.ts'
 import { play } from '../src/player.ts'
@@ -264,6 +265,12 @@ const pitchLabel = (pitch: PitchConfig): string =>
     )
     .with({ kind: 'chromatic' }, ({ span }) => `chromatic ${String(span)}`)
     .with({ kind: 'drone' }, () => 'drone')
+    .exhaustive()
+
+const colorLabel = (color: ColorConfig): string =>
+  match(color)
+    .with({ kind: 'fixed' }, ({ at }) => `fixed ${at.toFixed(2)}`)
+    .with({ kind: 'vowel' }, ({ span }) => `${String(span)} vowels`)
     .exhaustive()
 
 const voicingFor = (model: Model): Voicing => {
@@ -545,8 +552,8 @@ const createLabApp = (
       choiceLine('preset', PRESET_NAMES, model.presetIndex),
       choiceLine('material', MATERIALS, model.materialIndex),
       '',
-      `${accent('sound')}  ${voice.touch} touch  ${String(voice.toneMs)} ms  ${voice.baseFrequency.toFixed(2)} Hz  hold ${voice.hold.toFixed(2)}  glide ${voice.glide.toFixed(1)}st`,
-      `${accent('voice')}  ${readingLabel(voice.reading)} -> ${pitchLabel(voice.pitch)}`,
+      `${accent('sound')}  ${voice.touch} touch  ${String(voice.toneMs)} ms  ${voice.baseFrequency.toFixed(2)} Hz  swell ${voice.swell.toFixed(2)}  hold ${voice.hold.toFixed(2)}  glide ${voice.glide.toFixed(1)}st`,
+      `${accent('voice')}  ${readingLabel(voice.reading)} -> ${pitchLabel(voice.pitch)}  colour ${colorLabel(voice.color)}`,
       `${accent('preset')} ${presets[preset].description}`,
       speedSlider(model.streamSpeedIndex),
       `${accent('stream')} ${model.mode} ${status}`

@@ -11,6 +11,7 @@
       "hold": 0,
       "glide": 0,
       "volume": 0.35,
+      "color": { "kind": "fixed", "at": 0.5 },
       "material": "ceramic",
       "touch": "normal",
       "baseFrequency": 220,
@@ -29,6 +30,7 @@
       "glide": 1,
       "material": "wood",
       "touch": "soft",
+      "color": { "kind": "vowel", "span": 4 },
       "baseFrequency": 146.83,
       "reading": { "kind": "phrase", "span": 4 },
       "pitch": {

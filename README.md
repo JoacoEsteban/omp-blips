@@ -72,18 +72,19 @@ display, and it puts every effect in the graph.
 
 Each stream selects a material and a touch. The first four materials are struck objects: their
 partials are inharmonic and they decay from one impulse. Material names evoke familiar objects, but
-they do not model physical materials. The last two are sustained tones with harmonic partials and
-almost no decay of their own. A struck object cannot make a voice, however long its tone is. Touch
-settings change the attack, upper modes, and attack noise.
+they do not model physical materials. The last two are sustained, and they are built differently:
+a harmonic source at the pitch, read through three resonances fixed in Hz. That is the structure of
+a voice, and a struck object cannot imitate it however long its tone is held. Touch settings change
+the attack, upper modes, and attack noise.
 
-| Material  | Character                                                                     |
-| --------- | ----------------------------------------------------------------------------- |
-| `wood`    | Few modes with a short decay.                                                 |
-| `stone`   | Dry low modes with sparse inharmonic upper resonances.                        |
-| `ceramic` | Bright modes with slight inharmonic spacing.                                  |
-| `glass`   | Bright upper modes with a long decay.                                         |
-| `reed`    | Odd harmonics only, with a low resonance. Hollow and narrow.                  |
-| `brass`   | Every harmonic, with a strong resonance high in the series. Bright and buzzy. |
+| Material  | Character                                                        |
+| --------- | ---------------------------------------------------------------- |
+| `wood`    | Few modes with a short decay.                                    |
+| `stone`   | Dry low modes with sparse inharmonic upper resonances.           |
+| `ceramic` | Bright modes with slight inharmonic spacing.                     |
+| `glass`   | Bright upper modes with a long decay.                            |
+| `reed`    | Odd harmonics under a low resonance. Hollow, narrow, and dark.   |
+| `brass`   | Every harmonic under three resonances. Bright, buzzy, and vocal. |
 
 | Touch    | Character                                          |
 | -------- | -------------------------------------------------- |
@@ -109,12 +110,24 @@ milliseconds end the tone. At `hold: 0` the decay starts at once, which is the s
 The `glide` option bends one tone. The pitch starts the given number of semitones above the
 nominal frequency and reaches it at the end of the tone. A `glide` of 0 holds the pitch steady.
 
+The resonances of a sustained material stay where they are when the pitch moves, which is why a
+vowel keeps its identity at any pitch. The `color` option decides where the second resonance sits
+inside its range: `{ "kind": "fixed", "at": 0.5 }` holds one mouth shape, and
+`{ "kind": "vowel", "span": 5 }` puts five shapes in rotation, so neighbouring characters are said
+with different mouths. `pitch` and `color` read the same character index and answer different
+questions: what note a character is, and what vowel it is said with. A struck material ignores
+`color`; it has no tract to move.
+
+The colour is quantised to `span` values on purpose. A separate value for each character index
+would render and cache a separate tone for every one of them, and two neighbouring mouth shapes are
+not distinguishable anyway.
+
 The synthesizer measures the peak of each rendered sound. A sound above the ceiling is scaled down,
 and a sound below it keeps its level. A `soft` touch stays quieter than a `firm` one, and no
 material can clip.
 
-The cache key includes the exact frequency, duration, decay, swell, hold, glide, material, touch,
-and a sound version. Volume is applied during playback, so it is not part of the key.
+The cache key includes the exact frequency, duration, decay, swell, hold, glide, colour, material,
+touch, and a sound version. Volume is applied during playback, so it is not part of the key.
 
 Old cache files remain in `$TMPDIR/omp-blips`. New sound keys prevent reuse of old fixed-synth files.
 
@@ -170,14 +183,17 @@ The six presets after `quiet` each show one reading or one pitch with nothing in
 sustained material. Each blip rises across its first fifth, holds flat at 164.81 Hz with no decay
 and no bend, and is cut by the next character 66 milliseconds later. The tones are nearly as long
 as the interval between them, so the syllables run together instead of separating into a rhythm.
-The reasoning speaks a fourth below the text on the narrower `reed`, and the tool voice is the one
-struck sound in the preset. `telegraph` is the same reading and the same pitch played as a strike,
-and it ticks.
+Five vowel colours rotate under the text voice, so neighbouring characters are said with different
+mouths. The reasoning speaks a fourth below on the narrower `reed`, with three colours instead of
+five. The tool voice is the one struck sound in the preset. `telegraph` is the same reading and the
+same pitch played as a strike, and it ticks.
 
-The numbers come from measuring a recording of that kind of speech blip: a low fundamental, a
-spectral centroid near 1.7 kHz with a third of the energy above 2 kHz, a steady pitch, and an
-envelope that rises and is cut rather than struck. The `brass` spectrum is generated from a
-formula, not copied from the recording.
+The numbers come from measuring a short recording of one speech blip of this kind: a fundamental
+near 162 Hz, a first resonance at about 290 Hz, a second near 1730 Hz, a third near 2790 Hz, a
+steady pitch, and an envelope that rises and is cut rather than struck. The resonances of `brass`
+use bandwidths of a real vocal tract instead of the narrow ones measured, because the narrow ones
+are what make a synthesized blip sound like a filter. Every partial level comes from that formula;
+nothing is sampled.
 
 To hear all presets one after the other, run `mise run audition`.
 
@@ -420,10 +436,14 @@ Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts thes
 | `glide`         | number                                                              | Semitones the pitch falls across one tone. 0 holds it steady.   |
 | `volume`        | number from 0 to 1                                                  | The loudness of this voice.                                     |
 | `material`      | `"wood"`, `"stone"`, `"ceramic"`, `"glass"`, `"reed"`, or `"brass"` | The resonant material.                                          |
+| `color`         | a colour object                                                     | Where the second resonance sits, for a sustained material.      |
 | `touch`         | `"soft"`, `"normal"`, or `"firm"`                                   | The attack and upper-mode strength.                             |
 | `baseFrequency` | number                                                              | The reference frequency in Hz of this voice.                    |
 | `reading`       | a reading object                                                    | How a character becomes a number, or becomes silent.            |
 | `pitch`         | a pitch object                                                      | How that number becomes a frequency.                            |
+
+A colour object is either `{ "kind": "fixed", "at": <0 to 1> }` or
+`{ "kind": "vowel", "span": <count> }`.
 
 The file `blips.example.json` shows material and touch keys with example values.
 

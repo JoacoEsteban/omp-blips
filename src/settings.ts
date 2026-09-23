@@ -50,6 +50,14 @@ const pitchSchema = z.discriminatedUnion('kind', [
   })
 ])
 
+const colorSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('fixed'), at: z.number().min(0).max(1) }),
+  z.strictObject({
+    kind: z.literal('vowel'),
+    span: z.number().int().positive()
+  })
+])
+
 const voiceSchema = z
   .object({
     enabled: z.boolean(),
@@ -60,6 +68,7 @@ const voiceSchema = z
     glide: z.number(),
     volume: z.number().min(0).max(1),
     material: z.enum(['wood', 'stone', 'ceramic', 'glass', 'reed', 'brass']),
+    color: colorSchema,
     touch: z.enum(['soft', 'normal', 'firm']),
     baseFrequency: z.number().positive(),
     reading: readingSchema,
@@ -134,6 +143,7 @@ const mergeVoice = (
   glide: patch.glide ?? base.glide,
   volume: patch.volume ?? base.volume,
   material: patch.material ?? base.material,
+  color: patch.color ?? base.color,
   touch: patch.touch ?? base.touch,
   baseFrequency: patch.baseFrequency ?? base.baseFrequency,
   reading: patch.reading ?? base.reading,

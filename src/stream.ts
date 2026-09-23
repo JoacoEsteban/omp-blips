@@ -22,6 +22,7 @@ import {
 } from 'rxjs'
 import { match, P } from 'ts-pattern'
 import type { StreamKind, VoiceConfig } from './config.ts'
+import { colorOf } from './color.ts'
 import { frequencyOf } from './pitch.ts'
 import { type Reading, type ReadingConfig, readingOf } from './reading.ts'
 import type { Tone } from './players/types.ts'
@@ -109,13 +110,16 @@ const cursorOf = ({ cursor, source }: Count, reading: ReadingConfig): Reading =>
     .with({ cursor: P.nonNullable, stale: false }, ({ cursor: live }) => live)
     .otherwise(() => readingOf(reading))
 
-const toneOf = (voice: VoiceConfig, frequency: number): Tone => ({
-  frequency,
+const toneOf = (voice: VoiceConfig, index: number): Tone => ({
+  frequency: frequencyOf(index, voice),
   toneMs: voice.toneMs,
   decay: voice.decay,
   swell: voice.swell,
   hold: voice.hold,
   glide: voice.glide,
+  // Pitch and colour read the same index and answer different questions: what
+  // note the character is, and what mouth shape it is said with.
+  color: colorOf(index, voice.color),
   material: voice.material,
   touch: voice.touch,
   volume: voice.volume
@@ -142,7 +146,7 @@ const strike = (
           ...carried,
           blip: {
             char,
-            tone: toneOf(voiced, frequencyOf(sounded, voiced)),
+            tone: toneOf(voiced, sounded),
             paceMs: minIntervalMs
           }
         }))

@@ -1,4 +1,5 @@
 import { MAJOR_PENTATONIC, MINOR_PENTATONIC } from './scales.ts'
+import type { ColorConfig } from './color.ts'
 import type { PitchConfig } from './pitch.ts'
 import type { ReadingConfig } from './reading.ts'
 import type { Material, Touch } from './synth.ts'
@@ -30,6 +31,8 @@ export interface VoiceConfig {
   readonly volume: number
   /** Modal material for this stream. */
   readonly material: Material
+  /** How a character index becomes a vowel colour, for sustained materials. */
+  readonly color: ColorConfig
   /** Strike force for this stream. */
   readonly touch: Touch
   /** Frequency of index 0, and the whole of a `drone` voice. */
@@ -75,6 +78,7 @@ export const defaultConfig: BlipConfig = {
       glide: 0,
       volume: 0.35,
       material: 'ceramic',
+      color: { kind: 'fixed', at: 0.5 },
       touch: 'normal',
       baseFrequency: 220,
       reading: { kind: 'alphabet', every: 3 },
@@ -96,6 +100,7 @@ export const defaultConfig: BlipConfig = {
       glide: 0,
       volume: 0.32,
       material: 'wood',
+      color: { kind: 'fixed', at: 0.5 },
       touch: 'soft',
       baseFrequency: 146.83,
       reading: { kind: 'alphabet', every: 4 },
@@ -116,6 +121,7 @@ export const defaultConfig: BlipConfig = {
       glide: 0,
       volume: 0.22,
       material: 'glass',
+      color: { kind: 'fixed', at: 0.5 },
       touch: 'soft',
       baseFrequency: 523.25,
       reading: { kind: 'alphabet', every: 6 },

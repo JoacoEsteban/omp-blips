@@ -599,6 +599,10 @@ export const presets: Record<PresetName, Preset> = {
           glide: 0,
           volume: 0.3,
           material: 'brass',
+          // Five mouth shapes in rotation: neighbouring characters land on
+          // different vowels, which is the articulation a single held
+          // resonance cannot give.
+          color: { kind: 'vowel', span: 5 },
           touch: 'normal',
           // Low, but with most of the energy in the partials well above it.
           baseFrequency: 164.81,
@@ -617,6 +621,7 @@ export const presets: Record<PresetName, Preset> = {
           // the quieter voice without giving up the register.
           baseFrequency: 123.47,
           material: 'reed',
+          color: { kind: 'vowel', span: 3 },
           touch: 'soft',
           reading: { kind: 'class', every: 2 },
           pitch: { kind: 'drone' }

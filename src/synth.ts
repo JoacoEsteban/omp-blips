@@ -1,10 +1,12 @@
+import { match } from 'ts-pattern'
+
 export const SAMPLE_RATE = 44_100
 
 const BITS_PER_SAMPLE = 16
 const CHANNELS = 1
 const PEAK = 0x7fff
 const NYQUIST = SAMPLE_RATE / 2
-const SOUND_VERSION = 'modal-v3'
+const SOUND_VERSION = 'formant-v4'
 /** Nominal level of the modal sum, before the ceiling is enforced. */
 const VOICE_GAIN = 0.55
 /** No rendered sample passes this level, whatever the material and touch are. */
@@ -36,6 +38,11 @@ export interface Sound {
   readonly hold: number
   /** Semitones the pitch falls across the tone; 0 is a steady pitch. */
   readonly glide: number
+  /**
+   * Where the second formant sits inside its sweep, 0..1. Only a sustained
+   * material reads it; a struck one has no tract to move.
+   */
+  readonly color: number
   readonly material: Material
   readonly touch: Touch
 }
@@ -52,37 +59,104 @@ interface TouchProfile {
   readonly noiseStrength: number
 }
 
+interface Formant {
+  /** Centre of the resonance, in Hz, independent of the pitch. */
+  readonly hz: number
+  /** Width at 3 dB down, in Hz. Narrow rings, wide colours. */
+  readonly bw: number
+  readonly gain: number
+}
+
+interface Tract {
+  /** 1 voices every harmonic, 2 only the odd ones. */
+  readonly step: number
+  /** Fall of the source spectrum, as `1 / n ** tilt`. */
+  readonly tilt: number
+  readonly formants: readonly Formant[]
+  /** How far `color` slides the second formant, in Hz. */
+  readonly sweep: number
+}
+
 /**
- * A sustained spectrum: harmonics stepping by `step`, falling as `1 / n ** tilt`,
- * and lifted by one broad resonance around the `peak`th partial. Where that
- * resonance sits is what identifies a voice, and it is the one thing a struck
- * material cannot supply: its partials are inharmonic and its brightness dies
- * with the strike.
+ * The two sustained materials are a source and a filter, the way a voice is: a
+ * harmonic source at the pitch, shaped by resonances that stay where they are
+ * when the pitch moves. That fixed-in-Hz behaviour is what separates a vowel
+ * from a synthesizer patch, and it is the one thing a struck material cannot
+ * do — its partials are inharmonic and its brightness dies with the strike.
  */
-const sustained = (
-  shape: {
-    readonly step: number
-    readonly tilt: number
-    readonly peak: number
-    readonly width: number
-    readonly lift: number
+const TRACTS: Readonly<Record<'reed' | 'brass', Tract>> = {
+  // Close and narrow: odd harmonics only, under a low first resonance and a
+  // second one that barely moves. The darker of the two.
+  reed: {
+    step: 2,
+    tilt: 0.6,
+    formants: [
+      { hz: 320, bw: 110, gain: 1 },
+      { hz: 1500, bw: 220, gain: 1.6 },
+      { hz: 2600, bw: 240, gain: 1 }
+    ],
+    sweep: 260
   },
-  count: number
-): readonly ResonanceMode[] =>
-  Array.from({ length: count }, (_, index) => {
-    const ratio = 1 + index * shape.step
-    const lift =
-      shape.lift * Math.exp(-(((ratio - shape.peak) / shape.width) ** 2))
-    return {
+  // A close rounded vowel: a low first formant, a second front of centre, and
+  // a third wide enough to stay bright without ringing. The source falls
+  // gently rather than as 1/n, because a steep source buries the upper
+  // formants and the tone collapses back into a hum.
+  brass: {
+    step: 1,
+    tilt: 0.4,
+    formants: [
+      { hz: 290, bw: 90, gain: 1 },
+      { hz: 1730, bw: 200, gain: 2.5 },
+      { hz: 2790, bw: 200, gain: 2 }
+    ],
+    sweep: 460
+  }
+}
+
+/** Magnitude of one two-pole resonance at a frequency. */
+const resonance = (hz: number, formant: Formant): number =>
+  (formant.gain * (formant.hz * formant.bw)) /
+  Math.sqrt((formant.hz ** 2 - hz ** 2) ** 2 + (hz * formant.bw) ** 2)
+
+/**
+ * A harmonic source read through the tract. `color` slides the second formant
+ * across its sweep, which is the articulation: consecutive tones become
+ * different vowels instead of the same one at a different pitch.
+ */
+const voiced = (
+  tract: Tract,
+  frequency: number,
+  color: number
+): readonly ResonanceMode[] => {
+  const formants = tract.formants.map((formant, index) =>
+    match(index)
+      .with(1, () => ({
+        ...formant,
+        hz: formant.hz + (color - 0.5) * tract.sweep
+      }))
+      .otherwise(() => formant)
+  )
+  const modes: ResonanceMode[] = []
+  for (let ratio = 1; ratio * frequency < 5200; ratio += tract.step) {
+    const hz = ratio * frequency
+    const shaped = formants.reduce(
+      (sum, formant) => sum + resonance(hz, formant),
+      0
+    )
+    modes.push({
       ratio,
-      gain: (0.9 / ratio ** shape.tilt) * (1 + lift),
+      gain: (0.9 / ratio ** tract.tilt) * shaped,
       // Upper partials fade first, as they do in any sustained tone. `hold`
       // decides how much of that fade is heard at all.
       decay: 0.5 + ratio * 0.08
-    }
-  })
+    })
+  }
+  return modes
+}
 
-const MATERIAL_MODES: Readonly<Record<Material, readonly ResonanceMode[]>> = {
+const MATERIAL_MODES: Readonly<
+  Record<Exclude<Material, 'reed' | 'brass'>, readonly ResonanceMode[]>
+> = {
   wood: [
     { ratio: 1, gain: 0.9, decay: 4.5 },
     { ratio: 1.99, gain: 0.18, decay: 8 },
@@ -105,14 +179,16 @@ const MATERIAL_MODES: Readonly<Record<Material, readonly ResonanceMode[]>> = {
     { ratio: 3.07, gain: 0.3, decay: 4.5 },
     { ratio: 4.15, gain: 0.2, decay: 5.4 },
     { ratio: 5.3, gain: 0.12, decay: 6.2 }
-  ],
-  // Hollow and narrow: odd partials only, with the resonance low in the series.
-  reed: sustained({ step: 2, tilt: 1.1, peak: 5, width: 3, lift: 0.8 }, 8),
-  // Bright and buzzy: every partial, with a strong resonance high in the
-  // series, so most of the energy sits far above the fundamental. That is what
-  // makes a low tone read as a voice instead of as a hum.
-  brass: sustained({ step: 1, tilt: 0.5, peak: 12, width: 6, lift: 4.5 }, 20)
+  ]
 }
+
+/** The partials of one sound, struck or voiced. */
+const modesOf = (sound: Sound): readonly ResonanceMode[] =>
+  match(sound.material)
+    .with('reed', 'brass', (name) =>
+      voiced(TRACTS[name], sound.frequency, sound.color)
+    )
+    .otherwise((name) => MATERIAL_MODES[name])
 
 const TOUCH_PROFILES: Readonly<Record<Touch, TouchProfile>> = {
   soft: { attackMs: 8, upperModeGain: 0.35, noiseStrength: 0.015 },
@@ -136,7 +212,7 @@ const renderVoice = (sound: Sound): Float32Array => {
   const frequency = sound.frequency
   const frames = Math.max(1, Math.round((SAMPLE_RATE * sound.toneMs) / 1000))
   const profile = TOUCH_PROFILES[sound.touch]
-  const modes = MATERIAL_MODES[sound.material]
+  const modes = modesOf(sound)
     .filter((mode) => mode.ratio * frequency < NYQUIST)
     .map((mode, index) => {
       let excitation = profile.upperModeGain
@@ -235,7 +311,7 @@ const renderVoice = (sound: Sound): Float32Array => {
 }
 
 export const soundKey = (sound: Sound): string =>
-  `${SOUND_VERSION}:${String(sound.frequency)}:${String(sound.toneMs)}:${String(sound.decay)}:${String(sound.swell)}:${String(sound.hold)}:${String(sound.glide)}:${sound.material}:${sound.touch}`
+  `${SOUND_VERSION}:${String(sound.frequency)}:${String(sound.toneMs)}:${String(sound.decay)}:${String(sound.swell)}:${String(sound.hold)}:${String(sound.glide)}:${String(sound.color)}:${sound.material}:${sound.touch}`
 
 /** Cached voice for a complete sound identity. */
 export const voice = (sound: Sound): Float32Array => {
