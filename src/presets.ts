@@ -576,44 +576,34 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // The one preset built on a sustained timbre instead of a struck one, and
-  // the reason `reed`, `brass`, `hold` and `glide` exist. A speech blip in a
-  // 2D RPG is a bright buzz held flat for its whole length and then cut by the
-  // next character: no strike, no tail, and no bend. `telegraph` is the same
-  // reading and the same pitch played as a strike, and it ticks.
+  // A rounded speech blip with a gradual fade, based on voice_sans.mp3.
   sans: {
-    description: 'A deadpan mumble. Held low blips, one for each character.',
+    description: 'A deadpan mumble. Rounded low blips, one for each character.',
     patch: {
-      // A character every 66 ms, tones nearly that long: the syllables run
-      // together into speech instead of separating into a rhythm.
+      // Keep the character cadence independent of the longer sample envelope.
       minIntervalMs: 66,
       voices: {
         text: {
-          toneMs: 64,
-          decay: 1,
-          // The sound arrives rather than starting: a rise across the first
-          // fifth of the tone, then a flat body cut by the next character. No
-          // strike, no tail, and no bend.
-          swell: 0.2,
-          hold: 1,
+          toneMs: 115,
+          decay: 5,
+          // A short rise, a held body, then a fade across the second half.
+          swell: 0.15,
+          hold: 0.5,
           glide: 0,
           volume: 0.3,
           material: 'brass',
-          // Five mouth shapes in rotation: neighbouring characters land on
-          // different vowels, which is the articulation a single held
-          // resonance cannot give.
-          color: { kind: 'vowel', span: 5 },
+          color: { kind: 'fixed', at: 0.5 },
           touch: 'normal',
-          // Low, but with most of the energy in the partials well above it.
+          // Most of the energy stays in the fundamental and second harmonic.
           baseFrequency: 164.81,
           reading: { kind: 'class', every: 1 },
           pitch: { kind: 'drone' }
         },
         thinking: {
-          toneMs: 96,
-          decay: 1,
-          swell: 0.2,
-          hold: 1,
+          toneMs: 115,
+          decay: 5,
+          swell: 0.15,
+          hold: 0.5,
           glide: 0,
           volume: 0.24,
           // A fourth below the text voice, at half the rate: the same mouth,
@@ -621,7 +611,7 @@ export const presets: Record<PresetName, Preset> = {
           // the quieter voice without giving up the register.
           baseFrequency: 123.47,
           material: 'reed',
-          color: { kind: 'vowel', span: 3 },
+          color: { kind: 'fixed', at: 0.5 },
           touch: 'soft',
           reading: { kind: 'class', every: 2 },
           pitch: { kind: 'drone' }

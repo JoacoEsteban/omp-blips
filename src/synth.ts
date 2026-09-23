@@ -6,7 +6,7 @@ const BITS_PER_SAMPLE = 16
 const CHANNELS = 1
 const PEAK = 0x7fff
 const NYQUIST = SAMPLE_RATE / 2
-const SOUND_VERSION = 'formant-v4'
+const SOUND_VERSION = 'formant-v5'
 /** Nominal level of the modal sum, before the ceiling is enforced. */
 const VOICE_GAIN = 0.55
 /** No rendered sample passes this level, whatever the material and touch are. */
@@ -97,17 +97,15 @@ const TRACTS: Readonly<Record<'reed' | 'brass', Tract>> = {
     ],
     sweep: 260
   },
-  // A close rounded vowel: a low first formant, a second front of centre, and
-  // a third wide enough to stay bright without ringing. The source falls
-  // gently rather than as 1/n, because a steep source buries the upper
-  // formants and the tone collapses back into a hum.
+  // A rounded low vowel: the first resonance emphasizes the second harmonic
+  // near the Sans register. The upper resonances add a quiet vocal texture.
   brass: {
     step: 1,
     tilt: 0.4,
     formants: [
-      { hz: 290, bw: 90, gain: 1 },
-      { hz: 1730, bw: 200, gain: 2.5 },
-      { hz: 2790, bw: 200, gain: 2 }
+      { hz: 330, bw: 110, gain: 1 },
+      { hz: 1340, bw: 130, gain: 0.4 },
+      { hz: 2800, bw: 200, gain: 0.3 }
     ],
     sweep: 460
   }

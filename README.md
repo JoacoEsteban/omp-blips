@@ -77,14 +77,14 @@ a harmonic source at the pitch, read through three resonances fixed in Hz. That 
 a voice, and a struck object cannot imitate it however long its tone is held. Touch settings change
 the attack, upper modes, and attack noise.
 
-| Material  | Character                                                        |
-| --------- | ---------------------------------------------------------------- |
-| `wood`    | Few modes with a short decay.                                    |
-| `stone`   | Dry low modes with sparse inharmonic upper resonances.           |
-| `ceramic` | Bright modes with slight inharmonic spacing.                     |
-| `glass`   | Bright upper modes with a long decay.                            |
-| `reed`    | Odd harmonics under a low resonance. Hollow, narrow, and dark.   |
-| `brass`   | Every harmonic under three resonances. Bright, buzzy, and vocal. |
+| Material  | Character                                                       |
+| --------- | --------------------------------------------------------------- |
+| `wood`    | Few modes with a short decay.                                   |
+| `stone`   | Dry low modes with sparse inharmonic upper resonances.          |
+| `ceramic` | Bright modes with slight inharmonic spacing.                    |
+| `glass`   | Bright upper modes with a long decay.                           |
+| `reed`    | Odd harmonics under a low resonance. Hollow, narrow, and dark.  |
+| `brass`   | Every harmonic under three resonances. Rounded, low, and vocal. |
 
 | Touch    | Character                                          |
 | -------- | -------------------------------------------------- |
@@ -164,7 +164,7 @@ presets. The default preset has the name `default`.
 | `cipher`     | One semitone for each letter. You hear a word as it is spelled.                     | `chromatic` |
 | `telegraph`  | A wire. Each character is one tick, and only the spaces speak.                      | `class`     |
 | `hexdump`    | Raw bytes. Punctuation sounds, and the tool calls lead.                             | `codepoint` |
-| `sans`       | A deadpan mumble. Held low blips, one for each character.                           | `brass`     |
+| `sans`       | A deadpan mumble. Rounded low blips, one for each character.                        | `brass`     |
 
 The six presets after `quiet` each show one reading or one pitch with nothing in its way:
 
@@ -179,21 +179,18 @@ The six presets after `quiet` each show one reading or one pitch with nothing in
 - `hexdump` reads the tool arguments character by character. It is the one preset in which the
   tool voice leads.
 
-`sans` is a character voice rather than an instrument, and it is the one preset built on a
-sustained material. Each blip rises across its first fifth, holds flat at 164.81 Hz with no decay
-and no bend, and is cut by the next character 66 milliseconds later. The tones are nearly as long
-as the interval between them, so the syllables run together instead of separating into a rhythm.
-Five vowel colours rotate under the text voice, so neighbouring characters are said with different
-mouths. The reasoning speaks a fourth below on the narrower `reed`, with three colours instead of
-five. The tool voice is the one struck sound in the preset. `telegraph` is the same reading and the
-same pitch played as a strike, and it ticks.
+`sans` uses a sustained material for a low character voice. Each text blip lasts 115 milliseconds
+at 164.81 Hz. It rises across its first 15%, holds until its midpoint, then fades.
+The character interval remains 66 milliseconds, independent of the blip duration.
+One fixed vowel colour gives each character the same mouth shape.
+The reasoning voice uses the same envelope and a fixed colour on the narrower `reed`,
+at 123.47 Hz and half the character rate. The tool voice remains a short stone knock.
 
-The numbers come from measuring a short recording of one speech blip of this kind: a fundamental
-near 162 Hz, a first resonance at about 290 Hz, a second near 1730 Hz, a third near 2790 Hz, a
-steady pitch, and an envelope that rises and is cut rather than struck. The resonances of `brass`
-use bandwidths of a real vocal tract instead of the narrow ones measured, because the narrow ones
-are what make a synthesized blip sound like a filter. Every partial level comes from that formula;
-nothing is sampled.
+The text voice approximates `voice_sans.mp3`, which contains about 115 milliseconds of audible
+sound. The reference has a fundamental near 165 Hz and its strongest spectral peak near 330 Hz.
+The `brass` resonances emphasize this second harmonic, with weaker upper resonances near
+1340 Hz and 2800 Hz. The synthesized pitch stays fixed rather than reproducing the recording's
+small pitch changes. Every partial comes from the synthesis formula, not sampled audio.
 
 To hear all presets one after the other, run `mise run audition`.
 
