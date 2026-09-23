@@ -332,24 +332,33 @@ export const presets: Record<PresetName, Preset> = {
           volume: 0.24,
           material: 'glass',
           touch: 'soft',
-          baseFrequency: 174.61,
+          // An octave below the text voice, in its mode: this preset is one
+          // instrument with three registers, not three instruments.
+          baseFrequency: 196,
           reading: { kind: 'phrase', span: 5 },
-          pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
+          pitch: {
+            kind: 'scalar',
+            scale: HIRAJOSHI,
+            octaves: 2,
+            mapping: 'fold'
+          }
         },
         tool: {
-          toneMs: 180,
-          decay: 0.6,
-          volume: 0.12,
+          toneMs: 700,
+          decay: 0.4,
+          volume: 0.08,
           material: 'glass',
           touch: 'soft',
           baseFrequency: 783.99,
-          // Tool arguments have almost no word boundaries. This voice stays a
-          // faint sampled shimmer under the prose instead of pretending to
-          // have phrases.
-          reading: { kind: 'alphabet', every: 12 },
+          // Tool arguments have almost no word boundaries, so this voice
+          // samples letters instead of pretending to have phrases. The rate and
+          // the tone length are set together: what makes this preset sound like
+          // a room is tones overlapping their own tails, and a sparse voice with
+          // short tones stays outside that no matter what scale it uses.
+          reading: { kind: 'alphabet', every: 4 },
           pitch: {
             kind: 'scalar',
-            scale: MAJOR_PENTATONIC,
+            scale: HIRAJOSHI,
             octaves: 1,
             mapping: 'fold'
           }
