@@ -402,15 +402,21 @@ before stay in use. The extension never stops the session because of a configura
 | `mise run audition`  | Plays the same text through every preset.                             |
 | `mise run lab`       | Compares presets and materials with generated prose and code streams. |
 
-The sound lab has two modes. Prose uses `lorem-ipsum` and the text voice. Call uses `esfuzz` JavaScript and the tool voice.
-The call sample is raw code, not a JSON tool-call payload. The lab never runs the generated code.
+The sound lab has three modes, one for each voice. Prose uses `lorem-ipsum` and the text voice.
+Reason uses short lowercase sentences and the thinking voice. Call uses `esfuzz` JavaScript and
+the tool voice. The call sample is raw code, not a JSON tool-call payload. The lab never runs the
+generated code.
 
-Each mode generates a fresh sample when the current sample ends. Preset and material changes keep the current sample.
-The selected material applies to both voices. Switching modes restarts the selected sample and preserves the speed and pause state.
+Reasoning has shorter sentences than answer text. A reading that follows the structure of the text
+finds its sentence reset more frequently in this mode.
+
+Each mode generates a fresh sample when the current sample ends. Preset and material changes keep
+the current sample. The selected material applies to all three voices. Switching modes restarts
+the selected sample and preserves the speed and pause state.
 
 | Key          | Action                                       |
 | ------------ | -------------------------------------------- |
-| Tab          | Switch between prose and call.               |
+| Tab          | Switch between prose, reason and call.       |
 | `r`          | Generate a new sample for the selected mode. |
 | Left / Right | Select a preset.                             |
 | Up / Down    | Select a material.                           |

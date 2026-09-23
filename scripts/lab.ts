@@ -41,7 +41,7 @@ const selected = (text: string): string =>
   style.bold(style.hex('#fbbf24', `[${text}]`))
 const muted = (text: string): string => style.hex('#64748b', text)
 
-type StreamMode = 'prose' | 'call'
+type StreamMode = 'prose' | 'reason' | 'call'
 
 interface Model {
   readonly width: number
@@ -51,6 +51,7 @@ interface Model {
   readonly config: BlipConfig
   readonly mode: StreamMode
   readonly proseSample: string
+  readonly reasonSample: string
   readonly callSample: string
   readonly callError: string
   readonly streamSpeedIndex: number
@@ -144,8 +145,8 @@ const configFor = (preset: PresetName, material: Material): BlipConfig => {
   return {
     ...config,
     voices: {
-      ...config.voices,
       text: { ...config.voices.text, material },
+      thinking: { ...config.voices.thinking, material },
       tool: { ...config.voices.tool, material }
     }
   }
@@ -153,6 +154,18 @@ const configFor = (preset: PresetName, material: Material): BlipConfig => {
 
 const generateProseSample = (): string =>
   loremIpsum({ count: 3, units: 'paragraphs' })
+
+/**
+ * Reasoning reads as prose with shorter sentences, so a structural reading hits
+ * its sentence reset far more often here than in the answer text.
+ */
+const generateReasonSample = (): string =>
+  loremIpsum({
+    count: 14,
+    units: 'sentences',
+    sentenceLowerBound: 3,
+    sentenceUpperBound: 9
+  }).toLowerCase()
 
 const generateCallSample = (previous: string): GeneratedCall => {
   for (let attempt = 0; attempt < CALL_GENERATION_ATTEMPTS; attempt += 1) {
@@ -210,12 +223,14 @@ const effect =
 const sampleFor = (model: Model): string =>
   match(model.mode)
     .with('prose', () => model.proseSample)
+    .with('reason', () => model.reasonSample)
     .with('call', () => model.callSample)
     .exhaustive()
 
 const voiceFor = (model: Model): VoiceConfig =>
   match(model.mode)
     .with('prose', () => model.config.voices.text)
+    .with('reason', () => model.config.voices.thinking)
     .with('call', () => model.config.voices.tool)
     .exhaustive()
 
@@ -319,7 +334,8 @@ const speedSlider = (speedIndex: number): string => {
 const modeIndex = (mode: StreamMode): number =>
   match(mode)
     .with('prose', () => 0)
-    .with('call', () => 1)
+    .with('reason', () => 1)
+    .with('call', () => 2)
     .exhaustive()
 
 const previewFor = (model: Model): string[] =>
@@ -334,6 +350,12 @@ const restarted = (model: Model, previewLimit: number): Model =>
     .with('prose', () => ({
       ...model,
       proseSample: generateProseSample(),
+      streamOffset: 0,
+      streamed: `${model.streamed}\n`.slice(-previewLimit)
+    }))
+    .with('reason', () => ({
+      ...model,
+      reasonSample: generateReasonSample(),
       streamOffset: 0,
       streamed: `${model.streamed}\n`.slice(-previewLimit)
     }))
@@ -386,6 +408,7 @@ const createLabApp = (
       config: initialConfig,
       mode: 'prose',
       proseSample: generateProseSample(),
+      reasonSample: generateReasonSample(),
       callSample: call.sample,
       callError: call.error,
       streamSpeedIndex: DEFAULT_STREAM_SPEED_INDEX,
@@ -413,7 +436,8 @@ const createLabApp = (
               rewound({
                 ...model,
                 mode: match(model.mode)
-                  .with('prose', () => 'call' as const)
+                  .with('prose', () => 'reason' as const)
+                  .with('reason', () => 'call' as const)
                   .with('call', () => 'prose' as const)
                   .exhaustive()
               })
@@ -427,6 +451,10 @@ const createLabApp = (
                   .with('prose', () => ({
                     ...model,
                     proseSample: generateProseSample()
+                  }))
+                  .with('reason', () => ({
+                    ...model,
+                    reasonSample: generateReasonSample()
                   }))
                   .with('call', () => {
                     const call = generateCallSample(model.callSample)
@@ -502,7 +530,11 @@ const createLabApp = (
     const header = [
       accent('BLIPS SOUND LAB'),
       divider,
-      choiceLine('mode', ['prose', 'call'] as const, modeIndex(model.mode)),
+      choiceLine(
+        'mode',
+        ['prose', 'reason', 'call'] as const,
+        modeIndex(model.mode)
+      ),
       choiceLine('preset', PRESET_NAMES, model.presetIndex),
       choiceLine('material', MATERIALS, model.materialIndex),
       '',
