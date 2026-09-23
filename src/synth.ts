@@ -4,9 +4,14 @@ const BITS_PER_SAMPLE = 16
 const CHANNELS = 1
 const PEAK = 0x7fff
 const NYQUIST = SAMPLE_RATE / 2
-const SOUND_VERSION = "modal-v1"
-/** The maximum modal sum with firm excitation and attack noise stays below 1 / this gain. */
-const ANALYTICAL_NORMALIZE = 0.55
+const SOUND_VERSION = "modal-v2"
+/** Nominal level of the modal sum, before the ceiling is enforced. */
+const VOICE_GAIN = 0.55
+/** No rendered sample passes this level, whatever the material and touch are. */
+const CEILING = 0.92
+/** Fade at the end of the buffer, so the modal tail stops without a click. */
+const RELEASE_MS = 12
+const RELEASE_FRAMES = Math.max(1, Math.round((SAMPLE_RATE * RELEASE_MS) / 1000))
 
 export type Material = "wood" | "stone" | "ceramic" | "glass"
 export type Touch = "soft" | "normal" | "firm"
@@ -109,10 +114,17 @@ const renderVoice = (sound: Sound): Float32Array => {
 
 	if (frames <= 2) return samples
 
-	for (let i = 1; i < frames - 1; i += 1) {
-		const progress = i / (frames - 1)
+	/** Frames 0 and `last` stay at zero, so the buffer starts and ends on silence. */
+	const last = frames - 1
+	/** A short tone keeps at least half its length at full body. */
+	const releaseFrames = Math.max(1, Math.min(RELEASE_FRAMES, Math.floor(last / 2)))
+	const releaseStart = last - releaseFrames
+	let peak = 0
+
+	for (let i = 1; i < last; i += 1) {
 		const attack = Math.min(1, i / attackFrames)
-		const tail = 1 - progress
+		const releaseProgress = Math.max(0, (i - releaseStart) / releaseFrames)
+		const release = 0.5 * (1 + Math.cos(Math.PI * releaseProgress))
 		let resonances = 0
 		for (const mode of modes) {
 			resonances += Math.sin(mode.phase) * mode.gain * mode.decay
@@ -122,12 +134,21 @@ const renderVoice = (sound: Sound): Float32Array => {
 
 		filteredNoise += 0.18 * (nextNoise() - filteredNoise)
 		const noiseEnvelope = noiseDecay * attack
-		const sample = (resonances + filteredNoise * profile.noiseStrength * noiseEnvelope) *
-			ANALYTICAL_NORMALIZE * attack * tail
+		const sample =
+			(resonances + filteredNoise * profile.noiseStrength * noiseEnvelope) *
+			VOICE_GAIN *
+			attack *
+			release
 		samples[i] = sample
+		peak = Math.max(peak, Math.abs(sample))
 		noiseDecay *= noiseDecayStep
 	}
 
+	if (peak <= CEILING) return samples
+
+	/** Only a material or touch loud enough to clip pays for this pass. */
+	const limit = CEILING / peak
+	for (const [index, value] of samples.entries()) samples[index] = value * limit
 	return samples
 }
 

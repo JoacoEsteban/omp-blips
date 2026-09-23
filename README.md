@@ -51,6 +51,13 @@ Each stream selects a material and a touch. Material names evoke familiar object
 
 The default uses `ceramic` and `normal` for `text`, `wood` and `soft` for `thinking`, and `glass` and `soft` for `tool`. The settings are deterministic and do not vary between triggers.
 
+Each mode decays at its own rate. Only the last 12 milliseconds of a tone get a fade to silence, so
+what you hear is the decay of the material. The fade also keeps a click off the end of the buffer.
+
+The synthesizer measures the peak of each rendered sound. A sound above the ceiling is scaled down,
+and a sound below it keeps its level. A `soft` touch stays quieter than a `firm` one, and no
+material can clip.
+
 The cache key includes the exact frequency, duration, material, touch, and a sound version. Volume is applied during playback, so it is not part of the key.
 
 Old cache files remain in `$TMPDIR/omp-blips`. New sound keys prevent reuse of old fixed-synth files.
