@@ -20,7 +20,8 @@ export const PRESET_NAMES = [
   'plainchant',
   'cipher',
   'telegraph',
-  'hexdump'
+  'hexdump',
+  'sans'
 ] as const
 
 export type PresetName = (typeof PRESET_NAMES)[number]
@@ -570,6 +571,70 @@ export const presets: Record<PresetName, Preset> = {
           baseFrequency: 523.25,
           reading: { kind: 'codepoint', span: 32, every: 1 },
           pitch: { kind: 'chromatic', span: 24 }
+        }
+      }
+    }
+  },
+
+  // The one preset built on a sustained timbre instead of a struck one, and
+  // the reason `reed`, `brass`, `hold` and `glide` exist. A speech blip in a
+  // 2D RPG is a bright buzz held flat for its whole length and then cut by the
+  // next character: no strike, no tail, and no bend. `telegraph` is the same
+  // reading and the same pitch played as a strike, and it ticks.
+  sans: {
+    description: 'A deadpan mumble. Held low blips, one for each character.',
+    patch: {
+      // A character every 66 ms, tones nearly that long: the syllables run
+      // together into speech instead of separating into a rhythm.
+      minIntervalMs: 66,
+      voices: {
+        text: {
+          toneMs: 64,
+          decay: 1,
+          // The sound arrives rather than starting: a rise across the first
+          // fifth of the tone, then a flat body cut by the next character. No
+          // strike, no tail, and no bend.
+          swell: 0.2,
+          hold: 1,
+          glide: 0,
+          volume: 0.3,
+          material: 'brass',
+          touch: 'normal',
+          // Low, but with most of the energy in the partials well above it.
+          baseFrequency: 164.81,
+          reading: { kind: 'class', every: 1 },
+          pitch: { kind: 'drone' }
+        },
+        thinking: {
+          toneMs: 96,
+          decay: 1,
+          swell: 0.2,
+          hold: 1,
+          glide: 0,
+          volume: 0.24,
+          // A fourth below the text voice, at half the rate: the same mouth,
+          // talking to itself. `reed` drops the upper partials, so it reads as
+          // the quieter voice without giving up the register.
+          baseFrequency: 123.47,
+          material: 'reed',
+          touch: 'soft',
+          reading: { kind: 'class', every: 2 },
+          pitch: { kind: 'drone' }
+        },
+        // Not speech: a dry knock under the voice, and the one struck sound in
+        // the preset.
+        tool: {
+          toneMs: 28,
+          decay: 1.5,
+          swell: 0,
+          hold: 0,
+          glide: 0,
+          volume: 0.2,
+          material: 'stone',
+          touch: 'firm',
+          baseFrequency: 146.83,
+          reading: { kind: 'class', every: 3 },
+          pitch: { kind: 'drone' }
         }
       }
     }

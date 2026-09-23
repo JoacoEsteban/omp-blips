@@ -20,6 +20,12 @@ export interface VoiceConfig {
   readonly toneMs: number
   /** Multiplier for the material's modal decay rate; lower values ring longer. */
   readonly decay: number
+  /** Fraction of the tone spent rising to full level; 0 leaves the touch's attack. */
+  readonly swell: number
+  /** Fraction of the tone held at full body before the decay starts, 0..1. */
+  readonly hold: number
+  /** Semitones the pitch falls across a single tone; 0 is a steady pitch. */
+  readonly glide: number
   /** Output gain, 0..1. */
   readonly volume: number
   /** Modal material for this stream. */
@@ -64,6 +70,9 @@ export const defaultConfig: BlipConfig = {
       enabled: true,
       toneMs: 55,
       decay: 1,
+      swell: 0,
+      hold: 0,
+      glide: 0,
       volume: 0.35,
       material: 'ceramic',
       touch: 'normal',
@@ -82,6 +91,9 @@ export const defaultConfig: BlipConfig = {
       enabled: true,
       toneMs: 90,
       decay: 1,
+      swell: 0,
+      hold: 0,
+      glide: 0,
       volume: 0.32,
       material: 'wood',
       touch: 'soft',
@@ -99,6 +111,9 @@ export const defaultConfig: BlipConfig = {
       enabled: true,
       toneMs: 26,
       decay: 1,
+      swell: 0,
+      hold: 0,
+      glide: 0,
       volume: 0.22,
       material: 'glass',
       touch: 'soft',

@@ -113,6 +113,9 @@ const toneOf = (voice: VoiceConfig, frequency: number): Tone => ({
   frequency,
   toneMs: voice.toneMs,
   decay: voice.decay,
+  swell: voice.swell,
+  hold: voice.hold,
+  glide: voice.glide,
   material: voice.material,
   touch: voice.touch,
   volume: voice.volume

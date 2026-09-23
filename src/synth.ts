@@ -4,7 +4,7 @@ const BITS_PER_SAMPLE = 16
 const CHANNELS = 1
 const PEAK = 0x7fff
 const NYQUIST = SAMPLE_RATE / 2
-const SOUND_VERSION = 'modal-v2'
+const SOUND_VERSION = 'modal-v3'
 /** Nominal level of the modal sum, before the ceiling is enforced. */
 const VOICE_GAIN = 0.55
 /** No rendered sample passes this level, whatever the material and touch are. */
@@ -16,7 +16,13 @@ const RELEASE_FRAMES = Math.max(
   Math.round((SAMPLE_RATE * RELEASE_MS) / 1000)
 )
 
-export type Material = 'wood' | 'stone' | 'ceramic' | 'glass'
+/**
+ * What is resonating. The first four are struck objects: inharmonic partials
+ * over a short impulse. `reed` and `brass` are sustained tones with harmonic
+ * partials and almost no decay of their own — the spectra a voice needs, which
+ * a struck object cannot produce however long its tone is held.
+ */
+export type Material = 'wood' | 'stone' | 'ceramic' | 'glass' | 'reed' | 'brass'
 export type Touch = 'soft' | 'normal' | 'firm'
 
 export interface Sound {
@@ -24,6 +30,12 @@ export interface Sound {
   readonly toneMs: number
   /** Multiplier for the material decay rate; lower values sustain longer. */
   readonly decay: number
+  /** Fraction of the tone spent rising to full level; 0 leaves the touch's attack. */
+  readonly swell: number
+  /** Fraction of the tone held at full body before the decay starts, 0..1. */
+  readonly hold: number
+  /** Semitones the pitch falls across the tone; 0 is a steady pitch. */
+  readonly glide: number
   readonly material: Material
   readonly touch: Touch
 }
@@ -39,6 +51,36 @@ interface TouchProfile {
   readonly upperModeGain: number
   readonly noiseStrength: number
 }
+
+/**
+ * A sustained spectrum: harmonics stepping by `step`, falling as `1 / n ** tilt`,
+ * and lifted by one broad resonance around the `peak`th partial. Where that
+ * resonance sits is what identifies a voice, and it is the one thing a struck
+ * material cannot supply: its partials are inharmonic and its brightness dies
+ * with the strike.
+ */
+const sustained = (
+  shape: {
+    readonly step: number
+    readonly tilt: number
+    readonly peak: number
+    readonly width: number
+    readonly lift: number
+  },
+  count: number
+): readonly ResonanceMode[] =>
+  Array.from({ length: count }, (_, index) => {
+    const ratio = 1 + index * shape.step
+    const lift =
+      shape.lift * Math.exp(-(((ratio - shape.peak) / shape.width) ** 2))
+    return {
+      ratio,
+      gain: (0.9 / ratio ** shape.tilt) * (1 + lift),
+      // Upper partials fade first, as they do in any sustained tone. `hold`
+      // decides how much of that fade is heard at all.
+      decay: 0.5 + ratio * 0.08
+    }
+  })
 
 const MATERIAL_MODES: Readonly<Record<Material, readonly ResonanceMode[]>> = {
   wood: [
@@ -63,7 +105,13 @@ const MATERIAL_MODES: Readonly<Record<Material, readonly ResonanceMode[]>> = {
     { ratio: 3.07, gain: 0.3, decay: 4.5 },
     { ratio: 4.15, gain: 0.2, decay: 5.4 },
     { ratio: 5.3, gain: 0.12, decay: 6.2 }
-  ]
+  ],
+  // Hollow and narrow: odd partials only, with the resonance low in the series.
+  reed: sustained({ step: 2, tilt: 1.1, peak: 5, width: 3, lift: 0.8 }, 8),
+  // Bright and buzzy: every partial, with a strong resonance high in the
+  // series, so most of the energy sits far above the fundamental. That is what
+  // makes a low tone read as a voice instead of as a hum.
+  brass: sustained({ step: 1, tilt: 0.5, peak: 12, width: 6, lift: 4.5 }, 20)
 }
 
 const TOUCH_PROFILES: Readonly<Record<Touch, TouchProfile>> = {
@@ -131,21 +179,43 @@ const renderVoice = (sound: Sound): Float32Array => {
     Math.min(RELEASE_FRAMES, Math.floor(last / 2))
   )
   const releaseStart = last - releaseFrames
+  /** While a tone is held, the modal decay does not advance at all. */
+  const holdFrames = Math.round(Math.min(1, Math.max(0, sound.hold)) * last)
+  /**
+   * One geometric slide from `glide` semitones above the nominal frequency down
+   * to it, so a frame costs one multiplication instead of a `pow`. A glide of
+   * zero leaves the factor at 1 and the pitch steady.
+   */
+  const glideFrom = 2 ** (sound.glide / 12)
+  const glideStep = (1 / glideFrom) ** (1 / last)
+  let bend = glideFrom
+  /**
+   * The rise. A swell of zero leaves the touch's attack, and any larger value
+   * stretches it over that fraction of the tone: the sound arrives instead of
+   * starting. The attack noise keeps the touch's own short ramp, so a slow
+   * swell does not smear the onset noise across the whole tone.
+   */
+  const riseFrames = Math.max(
+    attackFrames,
+    Math.round(Math.min(1, Math.max(0, sound.swell)) * last)
+  )
   let peak = 0
 
   for (let i = 1; i < last; i += 1) {
-    const attack = Math.min(1, i / attackFrames)
+    const attack = Math.min(1, i / riseFrames)
+    const onset = Math.min(1, i / attackFrames)
     const releaseProgress = Math.max(0, (i - releaseStart) / releaseFrames)
     const release = 0.5 * (1 + Math.cos(Math.PI * releaseProgress))
     let resonances = 0
     for (const mode of modes) {
       resonances += Math.sin(mode.phase) * mode.gain * mode.decay
-      mode.phase += mode.phaseStep
-      mode.decay *= mode.decayStep
+      mode.phase += mode.phaseStep * bend
+      if (i > holdFrames) mode.decay *= mode.decayStep
     }
+    bend *= glideStep
 
     filteredNoise += 0.18 * (nextNoise() - filteredNoise)
-    const noiseEnvelope = noiseDecay * attack
+    const noiseEnvelope = noiseDecay * onset
     const sample =
       (resonances + filteredNoise * profile.noiseStrength * noiseEnvelope) *
       VOICE_GAIN *
@@ -165,7 +235,7 @@ const renderVoice = (sound: Sound): Float32Array => {
 }
 
 export const soundKey = (sound: Sound): string =>
-  `${SOUND_VERSION}:${String(sound.frequency)}:${String(sound.toneMs)}:${String(sound.decay)}:${sound.material}:${sound.touch}`
+  `${SOUND_VERSION}:${String(sound.frequency)}:${String(sound.toneMs)}:${String(sound.decay)}:${String(sound.swell)}:${String(sound.hold)}:${String(sound.glide)}:${sound.material}:${sound.touch}`
 
 /** Cached voice for a complete sound identity. */
 export const voice = (sound: Sound): Float32Array => {

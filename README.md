@@ -70,14 +70,20 @@ display, and it puts every effect in the graph.
 
 ## Modal synthesis
 
-Each stream selects a material and a touch. Material names evoke familiar objects, but they do not model physical materials. Touch settings change the attack, upper modes, and attack noise.
+Each stream selects a material and a touch. The first four materials are struck objects: their
+partials are inharmonic and they decay from one impulse. Material names evoke familiar objects, but
+they do not model physical materials. The last two are sustained tones with harmonic partials and
+almost no decay of their own. A struck object cannot make a voice, however long its tone is. Touch
+settings change the attack, upper modes, and attack noise.
 
-| Material  | Character                                              |
-| --------- | ------------------------------------------------------ |
-| `wood`    | Few modes with a short decay.                          |
-| `stone`   | Dry low modes with sparse inharmonic upper resonances. |
-| `ceramic` | Bright modes with slight inharmonic spacing.           |
-| `glass`   | Bright upper modes with a long decay.                  |
+| Material  | Character                                                                     |
+| --------- | ----------------------------------------------------------------------------- |
+| `wood`    | Few modes with a short decay.                                                 |
+| `stone`   | Dry low modes with sparse inharmonic upper resonances.                        |
+| `ceramic` | Bright modes with slight inharmonic spacing.                                  |
+| `glass`   | Bright upper modes with a long decay.                                         |
+| `reed`    | Odd harmonics only, with a low resonance. Hollow and narrow.                  |
+| `brass`   | Every harmonic, with a strong resonance high in the series. Bright and buzzy. |
 
 | Touch    | Character                                          |
 | -------- | -------------------------------------------------- |
@@ -90,11 +96,25 @@ The default uses `ceramic` and `normal` for `text`, `wood` and `soft` for `think
 Each mode decays at its own rate. Only the last 12 milliseconds of a tone get a fade to silence, so
 what you hear is the decay of the material. The fade also keeps a click off the end of the buffer.
 
+A sustained material needs an envelope that does not decay. Three fractions of the tone shape it,
+and each is a number from 0 to 1.
+
+The `swell` option is the rise. At `swell: 0` the tone starts with the attack of its touch, which
+is at most 8 milliseconds. A larger value stretches that rise over the given part of the tone, so
+the sound arrives instead of starting.
+
+The `hold` option is the flat body. At `hold: 1` the decay never advances, and only the last 12
+milliseconds end the tone. At `hold: 0` the decay starts at once, which is the strike.
+
+The `glide` option bends one tone. The pitch starts the given number of semitones above the
+nominal frequency and reaches it at the end of the tone. A `glide` of 0 holds the pitch steady.
+
 The synthesizer measures the peak of each rendered sound. A sound above the ceiling is scaled down,
 and a sound below it keeps its level. A `soft` touch stays quieter than a `firm` one, and no
 material can clip.
 
-The cache key includes the exact frequency, duration, material, touch, and a sound version. Volume is applied during playback, so it is not part of the key.
+The cache key includes the exact frequency, duration, decay, swell, hold, glide, material, touch,
+and a sound version. Volume is applied during playback, so it is not part of the key.
 
 Old cache files remain in `$TMPDIR/omp-blips`. New sound keys prevent reuse of old fixed-synth files.
 
@@ -131,6 +151,7 @@ presets. The default preset has the name `default`.
 | `cipher`     | One semitone for each letter. You hear a word as it is spelled.                     | `chromatic` |
 | `telegraph`  | A wire. Each character is one tick, and only the spaces speak.                      | `class`     |
 | `hexdump`    | Raw bytes. Punctuation sounds, and the tool calls lead.                             | `codepoint` |
+| `sans`       | A deadpan mumble. Held low blips, one for each character.                           | `brass`     |
 
 The six presets after `quiet` each show one reading or one pitch with nothing in its way:
 
@@ -144,6 +165,19 @@ The six presets after `quiet` each show one reading or one pitch with nothing in
   silent, so the words show as gaps.
 - `hexdump` reads the tool arguments character by character. It is the one preset in which the
   tool voice leads.
+
+`sans` is a character voice rather than an instrument, and it is the one preset built on a
+sustained material. Each blip rises across its first fifth, holds flat at 164.81 Hz with no decay
+and no bend, and is cut by the next character 66 milliseconds later. The tones are nearly as long
+as the interval between them, so the syllables run together instead of separating into a rhythm.
+The reasoning speaks a fourth below the text on the narrower `reed`, and the tool voice is the one
+struck sound in the preset. `telegraph` is the same reading and the same pitch played as a strike,
+and it ticks.
+
+The numbers come from measuring a recording of that kind of speech blip: a low fundamental, a
+spectral centroid near 1.7 kHz with a third of the energy above 2 kHz, a steady pitch, and an
+envelope that rises and is cut rather than struck. The `brass` spectrum is generated from a
+formula, not copied from the recording.
 
 To hear all presets one after the other, run `mise run audition`.
 
@@ -376,17 +410,20 @@ preset, then the first file, then the second file. A file gives only the keys th
 
 Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts these keys:
 
-| Key             | Type                                           | Function                                                        |
-| --------------- | ---------------------------------------------- | --------------------------------------------------------------- |
-| `enabled`       | boolean                                        | Starts this voice at the start of a session.                    |
-| `toneMs`        | number                                         | The length of one tone in milliseconds.                         |
-| `decay`         | positive number                                | Multiplies the material's decay rate. Lower values ring longer. |
-| `volume`        | number from 0 to 1                             | The loudness of this voice.                                     |
-| `material`      | `"wood"`, `"stone"`, `"ceramic"`, or `"glass"` | The resonant material.                                          |
-| `touch`         | `"soft"`, `"normal"`, or `"firm"`              | The attack and upper-mode strength.                             |
-| `baseFrequency` | number                                         | The reference frequency in Hz of this voice.                    |
-| `reading`       | a reading object                               | How a character becomes a number, or becomes silent.            |
-| `pitch`         | a pitch object                                 | How that number becomes a frequency.                            |
+| Key             | Type                                                                | Function                                                        |
+| --------------- | ------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `enabled`       | boolean                                                             | Starts this voice at the start of a session.                    |
+| `toneMs`        | number                                                              | The length of one tone in milliseconds.                         |
+| `decay`         | positive number                                                     | Multiplies the material's decay rate. Lower values ring longer. |
+| `swell`         | number from 0 to 1                                                  | The part of the tone spent rising to full level.                |
+| `hold`          | number from 0 to 1                                                  | The part of the tone held at full body before the decay starts. |
+| `glide`         | number                                                              | Semitones the pitch falls across one tone. 0 holds it steady.   |
+| `volume`        | number from 0 to 1                                                  | The loudness of this voice.                                     |
+| `material`      | `"wood"`, `"stone"`, `"ceramic"`, `"glass"`, `"reed"`, or `"brass"` | The resonant material.                                          |
+| `touch`         | `"soft"`, `"normal"`, or `"firm"`                                   | The attack and upper-mode strength.                             |
+| `baseFrequency` | number                                                              | The reference frequency in Hz of this voice.                    |
+| `reading`       | a reading object                                                    | How a character becomes a number, or becomes silent.            |
+| `pitch`         | a pitch object                                                      | How that number becomes a frequency.                            |
 
 The file `blips.example.json` shows material and touch keys with example values.
 

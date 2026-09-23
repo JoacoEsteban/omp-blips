@@ -33,7 +33,14 @@ const STREAM_SPEED_JUMPS = 50
 const DEFAULT_WIDTH = 100
 const DEFAULT_HEIGHT = 24
 const CALL_GENERATION_ATTEMPTS = 8
-const MATERIALS: readonly Material[] = ['wood', 'stone', 'ceramic', 'glass']
+const MATERIALS: readonly Material[] = [
+  'wood',
+  'stone',
+  'ceramic',
+  'glass',
+  'reed',
+  'brass'
+]
 
 const style = chalkStyle()
 const accent = (text: string): string => style.bold(style.hex('#22d3ee', text))
@@ -538,7 +545,7 @@ const createLabApp = (
       choiceLine('preset', PRESET_NAMES, model.presetIndex),
       choiceLine('material', MATERIALS, model.materialIndex),
       '',
-      `${accent('sound')}  ${voice.touch} touch  ${String(voice.toneMs)} ms  ${voice.baseFrequency.toFixed(2)} Hz`,
+      `${accent('sound')}  ${voice.touch} touch  ${String(voice.toneMs)} ms  ${voice.baseFrequency.toFixed(2)} Hz  hold ${voice.hold.toFixed(2)}  glide ${voice.glide.toFixed(1)}st`,
       `${accent('voice')}  ${readingLabel(voice.reading)} -> ${pitchLabel(voice.pitch)}`,
       `${accent('preset')} ${presets[preset].description}`,
       speedSlider(model.streamSpeedIndex),
