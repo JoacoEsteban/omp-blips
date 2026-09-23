@@ -7,14 +7,17 @@ import {
   MINOR_PENTATONIC
 } from './scales.ts'
 
-export type PresetName =
-  | 'default'
-  | 'arcade'
-  | 'gamelan'
-  | 'sonar'
-  | 'typewriter'
-  | 'music-box'
-  | 'quiet'
+export const PRESET_NAMES = [
+  'default',
+  'arcade',
+  'gamelan',
+  'sonar',
+  'typewriter',
+  'music-box',
+  'quiet'
+] as const
+
+export type PresetName = (typeof PRESET_NAMES)[number]
 
 export interface Preset {
   /** One line, shown by `/blips presets`. */
@@ -283,5 +286,3 @@ export const presets: Record<PresetName, Preset> = {
     }
   }
 }
-
-export const presetNames = Object.keys(presets) as readonly PresetName[]

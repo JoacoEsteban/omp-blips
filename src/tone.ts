@@ -3,20 +3,20 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { encodeWav, soundKey, voice, type Sound } from './synth.ts'
 
-const cacheDir = join(tmpdir(), 'omp-blips')
-const files = new Map<string, string>()
+const CACHE_DIR = join(tmpdir(), 'omp-blips')
+const FILES = new Map<string, string>()
 
 /** Path of a cached WAV for this sound, rendering it on first use. */
 export const toneFile = (sound: Sound): string => {
   const key = `blip-${soundKey(sound)}.wav`
-  const cached = files.get(key)
+  const cached = FILES.get(key)
   if (cached !== undefined) return cached
 
-  const path = join(cacheDir, key)
+  const path = join(CACHE_DIR, key)
   if (!existsSync(path)) {
-    mkdirSync(cacheDir, { recursive: true })
+    mkdirSync(CACHE_DIR, { recursive: true })
     writeFileSync(path, encodeWav(voice(sound)))
   }
-  files.set(key, path)
+  FILES.set(key, path)
   return path
 }

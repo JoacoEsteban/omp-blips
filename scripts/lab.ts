@@ -19,7 +19,7 @@ import { match } from 'ts-pattern'
 import type { BlipConfig, VoiceConfig } from '../src/config.ts'
 import { play } from '../src/player.ts'
 import { ffplay } from '../src/players/ffplay.ts'
-import { type PresetName, presetNames, presets } from '../src/presets.ts'
+import { type PresetName, PRESET_NAMES, presets } from '../src/presets.ts'
 import { loadSettings } from '../src/settings.ts'
 import { tonesFrom, type Voicing } from '../src/stream.ts'
 import type { Material } from '../src/synth.ts'
@@ -326,15 +326,15 @@ const restarted = (model: Model, previewLimit: number): Model =>
     .exhaustive()
 
 const withPreset = (model: Model, delta: number): Model => {
-  const presetIndex = cycle(model.presetIndex, delta, presetNames.length)
-  const preset = presetNames[presetIndex] ?? 'default'
+  const presetIndex = cycle(model.presetIndex, delta, PRESET_NAMES.length)
+  const preset = PRESET_NAMES[presetIndex] ?? 'default'
   const material = MATERIALS[model.materialIndex] ?? 'ceramic'
   return { ...model, presetIndex, config: configFor(preset, material) }
 }
 
 const withMaterial = (model: Model, delta: number): Model => {
   const materialIndex = cycle(model.materialIndex, delta, MATERIALS.length)
-  const preset = presetNames[model.presetIndex] ?? 'default'
+  const preset = PRESET_NAMES[model.presetIndex] ?? 'default'
   const material = MATERIALS[materialIndex] ?? 'ceramic'
   return { ...model, materialIndex, config: configFor(preset, material) }
 }
@@ -465,7 +465,7 @@ const createLabApp = (
       .otherwise((): [Model, Cmd<Msg>[]] => [model, []]),
 
   view: (model) => {
-    const preset = presetNames[model.presetIndex] ?? 'default'
+    const preset = PRESET_NAMES[model.presetIndex] ?? 'default'
     const voice = voiceFor(model)
     const status = match(model.paused)
       .with(true, () => selected('paused'))
@@ -476,7 +476,7 @@ const createLabApp = (
       accent('BLIPS SOUND LAB'),
       divider,
       choiceLine('mode', ['prose', 'call'] as const, modeIndex(model.mode)),
-      choiceLine('preset', presetNames, model.presetIndex),
+      choiceLine('preset', PRESET_NAMES, model.presetIndex),
       choiceLine('material', MATERIALS, model.materialIndex),
       '',
       `${accent('sound')}  ${voice.touch} touch  ${String(voice.toneMs)} ms  ${voice.baseFrequency.toFixed(2)} Hz  every ${String(voice.charsPerBlip)} chars`,

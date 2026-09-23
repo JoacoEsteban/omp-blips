@@ -13,7 +13,7 @@ import {
 } from 'rxjs'
 import { match } from 'ts-pattern'
 import type { StreamKind } from '../src/config.ts'
-import { presetNames, presets } from '../src/presets.ts'
+import { PRESET_NAMES, presets } from '../src/presets.ts'
 import { loadSettings } from '../src/settings.ts'
 import { playText } from './play.ts'
 
@@ -26,7 +26,7 @@ const kind: StreamKind = match(process.argv[3])
   .otherwise(() => 'text' as const)
 
 await lastValueFrom(
-  from(presetNames).pipe(
+  from(PRESET_NAMES).pipe(
     concatMap((name) =>
       defer(() => {
         const { config } = loadSettings(process.cwd(), name)

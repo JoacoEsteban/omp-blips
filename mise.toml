@@ -5,6 +5,14 @@ bun = "latest"
 description = "Type-check the extension"
 run = "bun run tsc --noEmit"
 
+[tasks.lint]
+description = "Lint the extension"
+run = "bun run lint"
+
+[tasks.lint-fix]
+description = "Lint and fix the extension"
+run = "bun run lint:fix"
+
 [tasks.demo]
 description = "Play a phrase through the blip pipeline"
 run = "bun run scripts/demo.ts"

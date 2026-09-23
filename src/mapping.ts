@@ -23,7 +23,7 @@ const wrap: Mapping = (index, slots) => index % slots
 const fold: Mapping = (index, slots) => {
   const span = Math.max(1, slots - 1)
   const position = index % (span * 2)
-  return position <= span ? position : span * 2 - position
+  return span - Math.abs(position - span)
 }
 
 export const mappings: Record<MappingName, Mapping> = { wrap, fold }

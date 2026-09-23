@@ -5,7 +5,7 @@
 import { lastValueFrom } from 'rxjs'
 import { match } from 'ts-pattern'
 import type { BackendName, StreamKind } from '../src/config.ts'
-import { presetNames } from '../src/presets.ts'
+import { PRESET_NAMES } from '../src/presets.ts'
 import { loadSettings } from '../src/settings.ts'
 import type { Material, Touch } from '../src/synth.ts'
 import { playText } from './play.ts'
@@ -15,7 +15,7 @@ const text =
 const kind: StreamKind = match(process.argv[3])
   .with('thinking', 'tool', (name) => name)
   .otherwise(() => 'text' as const)
-const preset = presetNames.find((name) => name === process.argv[6])
+const preset = PRESET_NAMES.find((name) => name === process.argv[6])
 const material: Material | undefined = match(process.argv[7])
   .with('wood', 'stone', 'ceramic', 'glass', (name) => name)
   .otherwise(() => undefined)

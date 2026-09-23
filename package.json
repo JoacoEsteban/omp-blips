@@ -5,10 +5,14 @@
   "type": "module",
   "description": "omp extension that plays a pitched blip while the assistant streams text",
   "omp": {
-    "extensions": ["./src/index.ts"]
+    "extensions": [
+      "./src/index.ts"
+    ]
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "lint": "eslint src scripts",
+    "lint:fix": "eslint src scripts --fix",
     "demo": "bun run scripts/demo.ts"
   },
   "dependencies": {
@@ -21,9 +25,18 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@eslint/compat": "^2.1.0",
+    "@eslint/js": "^10.0.1",
     "@oh-my-pi/pi-coding-agent": "^18.2.8",
     "@types/bun": "^1.4.2",
+    "better-typescript-lib": "^2.12.0",
+    "eslint": "^10.2.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jest": "^29.16.1",
+    "eslint-plugin-prettier": "^5.5.6",
+    "globals": "^17.11.0",
     "lorem-ipsum": "^3.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.0"
   }
 }

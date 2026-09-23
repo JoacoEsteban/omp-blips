@@ -10,7 +10,7 @@ import {
   type VoiceConfig,
   type VoicePatch
 } from './config.ts'
-import { type PresetName, presetNames, presets } from './presets.ts'
+import { type PresetName, PRESET_NAMES, presets } from './presets.ts'
 
 const voiceSchema = z
   .object({
@@ -31,7 +31,7 @@ const voiceSchema = z
 
 const settingsSchema = z
   .object({
-    preset: z.enum(presetNames as [PresetName, ...PresetName[]]),
+    preset: z.enum(PRESET_NAMES),
     minIntervalMs: z.number().min(0),
     backend: z.enum(['afplay', 'ffplay']),
     voices: z
@@ -67,9 +67,11 @@ const readSettings = (path: string): BlipSettings | string =>
   match(
     ((): unknown | Error => {
       try {
-        return JSON.parse(readFileSync(path, 'utf8')) as unknown
+        return JSON.parse(readFileSync(path, 'utf8'))
       } catch (error) {
-        return error instanceof Error ? error : new Error(String(error))
+        return match(error)
+          .with(P.instanceOf(Error), (cause) => cause)
+          .otherwise((cause) => new Error(String(cause)))
       }
     })()
   )

@@ -318,6 +318,8 @@ before stay in use. The extension never stops the session because of a configura
 | Command              | Function                                                              |
 | -------------------- | --------------------------------------------------------------------- |
 | `mise run typecheck` | Examines the types with `tsc`.                                        |
+| `mise run lint`      | Examines the source files with ESLint.                                |
+| `mise run lint-fix`  | Corrects ESLint errors that have automatic corrections.               |
 | `mise run demo`      | Plays a text through the pitch code and the backend.                  |
 | `mise run audition`  | Plays the same text through every preset.                             |
 | `mise run lab`       | Compares presets and materials with generated prose and code streams. |

@@ -2,12 +2,12 @@ import { match, P } from 'ts-pattern'
 import type { VoiceConfig } from './config.ts'
 import { mappings } from './mapping.ts'
 
-const CODE_a = 97
-const CODE_z = 122
+const CODE_A = 97
+const CODE_Z = 122
 const CODE_0 = 48
 const CODE_9 = 57
 
-const LETTER_COUNT = CODE_z - CODE_a + 1
+const LETTER_COUNT = CODE_Z - CODE_A + 1
 
 /**
  * Character -> alphabet index. Letters ascend alphabetically, digits continue
@@ -16,7 +16,7 @@ const LETTER_COUNT = CODE_z - CODE_a + 1
  */
 const indexFromCharacter = (char: string): number | undefined =>
   match(char.toLowerCase().codePointAt(0))
-    .with(P.number.between(CODE_a, CODE_z), (code) => code - CODE_a)
+    .with(P.number.between(CODE_A, CODE_Z), (code) => code - CODE_A)
     .with(
       P.number.between(CODE_0, CODE_9),
       (code) => LETTER_COUNT + (code - CODE_0)

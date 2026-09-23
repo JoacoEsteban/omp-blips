@@ -1,6 +1,6 @@
 import { match, P } from 'ts-pattern'
 import type { StreamKind } from './config.ts'
-import { type PresetName, presetNames, presets } from './presets.ts'
+import { type PresetName, PRESET_NAMES, presets } from './presets.ts'
 import type { Session, SessionEvent } from './session.ts'
 import { loadSettings, settingsPaths } from './settings.ts'
 
@@ -39,20 +39,18 @@ interface Subcommand {
 }
 
 const presetList = (): string =>
-  presetNames.map((key) => `${key} — ${presets[key].description}`).join('\n')
+  PRESET_NAMES.map((key) => `${key} — ${presets[key].description}`).join('\n')
 
 /** Second-level items repeat their subcommand: the chosen `value` replaces the whole argument. */
 const presetCompletions = (prefix: string): readonly Completion[] =>
-  presetNames
-    .filter((name) => name.startsWith(prefix))
-    .map((name) => ({
-      value: `preset ${name}`,
-      label: name,
-      description: presets[name].description
-    }))
+  PRESET_NAMES.filter((name) => name.startsWith(prefix)).map((name) => ({
+    value: `preset ${name}`,
+    label: name,
+    description: presets[name].description
+  }))
 
 /** One table drives the intents, the usage line, and the dropdown. */
-const subcommands: readonly Subcommand[] = [
+const SUBCOMMANDS: readonly Subcommand[] = [
   {
     name: 'on',
     description: 'Play every voice',
@@ -102,13 +100,11 @@ const subcommands: readonly Subcommand[] = [
 ]
 
 export const usage = (): string =>
-  `/blips [${subcommands
-    .map((sub) =>
-      match(sub.argument)
-        .with(P.nullish, () => sub.name)
-        .otherwise(({ hint }) => `${sub.name} ${hint}`)
-    )
-    .join('|')}]`
+  `/blips [${SUBCOMMANDS.map((sub) =>
+    match(sub.argument)
+      .with(P.nullish, () => sub.name)
+      .otherwise(({ hint }) => `${sub.name} ${hint}`)
+  ).join('|')}]`
 
 const itemFor = (sub: Subcommand): Completion =>
   match(sub.argument)
@@ -125,7 +121,7 @@ const itemFor = (sub: Subcommand): Completion =>
     }))
 
 const argumentItems = (name: string, prefix: string): readonly Completion[] =>
-  match(subcommands.find((sub) => sub.name === name))
+  match(SUBCOMMANDS.find((sub) => sub.name === name))
     .with({ argument: { complete: P.select() } }, (complete) =>
       complete(prefix)
     )
@@ -144,9 +140,9 @@ const completionsFor = (argumentPrefix: string): readonly Completion[] =>
         argumentItems(name.toLowerCase(), rest.trimStart().toLowerCase())
     )
     .otherwise(() =>
-      subcommands
-        .filter((sub) => sub.name.startsWith(argumentPrefix.toLowerCase()))
-        .map(itemFor)
+      SUBCOMMANDS.filter((sub) =>
+        sub.name.startsWith(argumentPrefix.toLowerCase())
+      ).map(itemFor)
     )
 
 /** The dropdown wants `null` rather than an empty list when nothing matches. */
@@ -170,7 +166,7 @@ const split = (args: string): readonly [string, string] =>
 export const parse = (args: string): Intent => {
   const [name, argument] = split(args)
 
-  return match(subcommands.find((sub) => sub.name === name))
+  return match(SUBCOMMANDS.find((sub) => sub.name === name))
     .with(P.nonNullable, (sub) => sub.intent(argument))
     .otherwise(() =>
       match(name)
@@ -183,7 +179,7 @@ export const parse = (args: string): Intent => {
 }
 
 const named = (name: string): PresetName | undefined =>
-  presetNames.find((candidate) => candidate === name)
+  PRESET_NAMES.find((candidate) => candidate === name)
 
 /**
  * The one impure step of the session fold: `reload`, `preset`, and `where` read
