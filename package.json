@@ -12,8 +12,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "eslint src scripts",
-    "lint:fix": "eslint src scripts --fix",
-    "demo": "bun run scripts/demo.ts"
+    "lint:fix": "eslint src scripts --fix"
   },
   "dependencies": {
     "@flyingrobots/bijou": "^7.2.0",

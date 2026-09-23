@@ -19,14 +19,17 @@ The agent sends a `message_update` event for each small part of the answer. Each
 The extension gives each of the three types a different voice. For each voice, one character in
 `charsPerBlip` becomes a blip.
 
-A character becomes a number: `a` is 0, `z` is 25, and the digits continue above the letters. All
-other characters are silent. Because space and punctuation are silent, the rhythm of the blips
-follows the words of the text. A silent character does not count towards `charsPerBlip`, so the rate
-stays the same in prose and in dense tool arguments.
+Each voice has a reading and a pitch. The reading turns a character into a number, or it makes the
+character silent. The pitch turns that number into a frequency. A silent character does not count
+towards `charsPerBlip`, so the rate stays the same in prose and in dense tool arguments.
 
-A mapping turns this number into a position in a musical scale. The scales use five or six notes per octave.
+The default reading is `alphabet`: `a` is 0, `z` is 25, and the digits continue above the letters.
+All other characters are silent. Because space and punctuation are silent, the rhythm of the blips
+follows the words of the text.
 
-A pentatonic scale avoids many close semitone steps. Modal resonances add inharmonic partials, so simultaneous blips can have tension.
+The default pitch is `scalar`. It puts the number in a musical scale of five or six notes per
+octave. A pentatonic scale avoids many close semitone steps. Modal resonances add inharmonic
+partials, so simultaneous blips can have tension.
 
 The modal synthesizer combines several resonant modes for each material. It adds a short filtered-noise attack.
 
@@ -139,14 +142,70 @@ ends. To see the list of names, run `/blips presets`.
 
 These values are the values of the preset `default`. Another preset gives other values.
 
-| Stream     | Lowest pitch | Range     | Scale            | Mapping | Material | Touch  | Sound                        |
-| ---------- | ------------ | --------- | ---------------- | ------- | -------- | ------ | ---------------------------- |
-| `text`     | 220 Hz       | 3 octaves | major pentatonic | `wrap`  | ceramic  | normal | the melody that you follow   |
-| `thinking` | 147 Hz       | 2 octaves | minor pentatonic | `fold`  | wood     | soft   | a dark murmur below the text |
-| `tool`     | 523 Hz       | 2 octaves | major pentatonic | `wrap`  | glass    | soft   | short bright ticks           |
+| Stream     | Lowest pitch | Reading    | Pitch                                       | Material | Touch  | Sound                        |
+| ---------- | ------------ | ---------- | ------------------------------------------- | -------- | ------ | ---------------------------- |
+| `text`     | 220 Hz       | `alphabet` | scalar, major pentatonic, 3 octaves, `wrap` | ceramic  | normal | the melody that you follow   |
+| `thinking` | 147 Hz       | `alphabet` | scalar, minor pentatonic, 2 octaves, `fold` | wood     | soft   | a dark murmur below the text |
+| `tool`     | 523 Hz       | `alphabet` | scalar, major pentatonic, 2 octaves, `wrap` | glass    | soft   | short bright ticks           |
 
 The `tool` voice makes fewer blips than the other two voices. Tool arguments are JSON and contain
 many characters.
+
+Each voice selects its own reading and its own pitch. The preset `gamelan` shows why: the two prose
+voices read phrases, and the `tool` voice plays one pitch for dense JSON.
+
+## Readings
+
+A reading turns a character into a number, or it makes the character silent. The file
+`src/reading.ts` holds the readings. A reading is a cursor: it reads one character and returns the
+reading that continues after it. A reading with memory keeps its state inside that cursor.
+
+| Reading     | Behavior                                                                      |
+| ----------- | ----------------------------------------------------------------------------- |
+| `alphabet`  | Letters, then digits. All other characters are silent.                        |
+| `codepoint` | Each visible character, after a division by `span`. Punctuation sounds too.   |
+| `class`     | Four numbers: vowel, consonant, digit, punctuation. Whitespace is silent.     |
+| `vowels`    | Vowels only, by their position in `aeiou`. The text becomes much more sparse. |
+| `phrase`    | Each word goes up in steps. Each word starts higher than the word before it.  |
+
+`phrase` has memory. A space lifts the floor that the next word starts from, and the floor returns
+to zero after a full stop, a question mark or an exclamation mark. As a result, you hear the length
+of each word first and the end of each sentence after it. A word that occurs many times does not
+sound the same each time.
+
+A configuration file gives a reading as an object with a `kind`:
+
+```json
+{ "voices": { "text": { "reading": { "kind": "phrase", "span": 4 } } } }
+```
+
+The `span` of `phrase` is the number of words before the floor returns to zero. The `span` of
+`codepoint` is the number of different values that it gives.
+
+## Pitches
+
+A pitch turns the number from the reading into a frequency. The file `src/pitch.ts` holds the
+pitches. Each pitch uses `baseFrequency` as its reference. `baseFrequency` stays on the voice,
+because each pitch needs it.
+
+| Pitch       | Behavior                                                                             |
+| ----------- | ------------------------------------------------------------------------------------ |
+| `scalar`    | The number becomes a position in a scale. It needs `scale`, `octaves` and `mapping`. |
+| `drone`     | One frequency for each character. There is no melody.                                |
+| `chromatic` | Semitone steps, after a division by `span`. There is no scale.                       |
+
+A configuration file gives a pitch as an object with a `kind`:
+
+```json
+{
+  "voices": {
+    "tool": { "pitch": { "kind": "chromatic", "span": 7 } }
+  }
+}
+```
+
+A file replaces the full `reading` object and the full `pitch` object. It does not merge the parts.
+A half `scalar` pitch and a half `drone` pitch is not a voice.
 
 ## Scales
 
@@ -167,9 +226,9 @@ the major pentatonic scale.
 
 ## Mappings
 
-A voice has a limited number of positions in its scale. The number is `scale.length * octaves`. A
-mapping puts the number of a character into one of these positions. The file `src/mapping.ts` holds
-the mappings. Each voice selects one mapping by name.
+A `scalar` pitch has a limited number of positions in its scale. The number is
+`scale.length * octaves`. A mapping puts the number of a character into one of these positions. The
+file `src/mapping.ts` holds the mappings. Each `scalar` pitch selects one mapping by name.
 
 `wrap` is the remainder after a division. The pitch goes up with the alphabet, but there is a large
 step at the end of the range. With 15 positions, `o` is the highest pitch and `p` is more than two
@@ -179,13 +238,6 @@ result, the melody makes large jumps and sounds mechanical.
 `fold` goes up to the highest position, then down again, then up again. Two letters that are
 together in the alphabet always get two positions that are together in the scale. As a result, the
 melody moves in small steps and sounds more like a song.
-
-To compare the two mappings, run these two commands:
-
-```sh
-mise run demo -- "no one opposes open protocols" text ffplay wrap
-mise run demo -- "no one opposes open protocols" text ffplay fold
-```
 
 ## Backends
 
@@ -272,7 +324,8 @@ preset, then the first file, then the second file. A file gives only the keys th
       "volume": 0.4,
       "material": "wood",
       "touch": "soft",
-      "mapping": "fold"
+      "reading": { "kind": "vowels" },
+      "pitch": { "kind": "drone" }
     },
     "tool": { "enabled": false }
   }
@@ -298,10 +351,9 @@ Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts thes
 | `volume`        | number from 0 to 1                             | The loudness of this voice.                                                    |
 | `material`      | `"wood"`, `"stone"`, `"ceramic"`, or `"glass"` | The resonant material.                                                         |
 | `touch`         | `"soft"`, `"normal"`, or `"firm"`              | The attack and upper-mode strength.                                            |
-| `baseFrequency` | number                                         | The frequency in Hz of the lowest position in the scale.                       |
-| `scale`         | array of numbers                               | The semitone positions of one octave of the scale.                             |
-| `octaves`       | integer                                        | The number of octaves for the range of characters.                             |
-| `mapping`       | `"wrap"` or `"fold"`                           | The mapping from a character to a position in the scale.                       |
+| `baseFrequency` | number                                         | The reference frequency in Hz of this voice.                                   |
+| `reading`       | a reading object                               | How a character becomes a number, or becomes silent.                           |
+| `pitch`         | a pitch object                                 | How that number becomes a frequency.                                           |
 
 The file `blips.example.json` shows material and touch keys with example values.
 
@@ -320,15 +372,8 @@ before stay in use. The extension never stops the session because of a configura
 | `mise run typecheck` | Examines the types with `tsc`.                                        |
 | `mise run lint`      | Examines the source files with ESLint.                                |
 | `mise run lint-fix`  | Corrects ESLint errors that have automatic corrections.               |
-| `mise run demo`      | Plays a text through the pitch code and the backend.                  |
 | `mise run audition`  | Plays the same text through every preset.                             |
 | `mise run lab`       | Compares presets and materials with generated prose and code streams. |
-
-The demo command accepts seven arguments: the text, the voice, the backend, the mapping, the preset, the material, and the touch. Each argument after the text is optional.
-
-```sh
-mise run demo -- "the quick brown fox" text ffplay fold gamelan glass normal
-```
 
 The sound lab has two modes. Prose uses `lorem-ipsum` and the text voice. Call uses `esfuzz` JavaScript and the tool voice.
 The call sample is raw code, not a JSON tool-call payload. The lab never runs the generated code.
@@ -352,16 +397,8 @@ Press `r` to retry. The previous sample remains stored but does not repeat autom
 The call stream uses `esfuzz.render(esfuzz.generate({ maxDepth: 8 }))`.
 `esfuzz` generates parser-fuzzing input, not representative application code.
 
-Compare materials with the same phrase, mapping, and touch:
-
-```sh
-mise run demo -- "no one opposes open protocols" text ffplay fold default wood normal
-mise run demo -- "no one opposes open protocols" text ffplay fold default ceramic normal
-mise run demo -- "no one opposes open protocols" text ffplay fold default glass normal
-```
-
-The demo reads the same configuration files as the extension. As a result, the demo sounds like the
-extension in that directory.
+The lab compares materials and presets with the same sample, so a change of one value is easy to
+hear. The lab reads the same configuration files as the extension.
 
 ## Platform
 

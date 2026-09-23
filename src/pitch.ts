@@ -1,38 +1,42 @@
-import { match, P } from 'ts-pattern'
+import { match } from 'ts-pattern'
 import type { VoiceConfig } from './config.ts'
-import { mappings } from './mapping.ts'
-
-const CODE_A = 97
-const CODE_Z = 122
-const CODE_0 = 48
-const CODE_9 = 57
-
-const LETTER_COUNT = CODE_Z - CODE_A + 1
+import { type MappingName, mappings } from './mapping.ts'
 
 /**
- * Character -> alphabet index. Letters ascend alphabetically, digits continue
- * above them, everything else (whitespace, punctuation) is silent so the
- * rhythm follows words instead of hammering a constant tone.
+ * How a voice turns a character index into a frequency. `baseFrequency` stays on
+ * the voice instead of inside a variant: every realization needs a reference
+ * pitch, and it is the one number people reach into a config file to nudge.
  */
-const indexFromCharacter = (char: string): number | undefined =>
-  match(char.toLowerCase().codePointAt(0))
-    .with(P.number.between(CODE_A, CODE_Z), (code) => code - CODE_A)
-    .with(
-      P.number.between(CODE_0, CODE_9),
-      (code) => LETTER_COUNT + (code - CODE_0)
-    )
-    .otherwise(() => undefined)
+export type PitchConfig =
+  | {
+      readonly kind: 'scalar'
+      /** Semitone offsets of one octave of the scale. */
+      readonly scale: readonly number[]
+      /** How many octaves the character range is spread over. */
+      readonly octaves: number
+      /** How the character index is folded into the available scale slots. */
+      readonly mapping: MappingName
+    }
+  /** No melody at all: one pitch, however the character reads. */
+  | { readonly kind: 'drone' }
+  /** Semitone steps with no scale, over a span the ear hears as one gesture. */
+  | { readonly kind: 'chromatic'; readonly span: number }
 
-/** Frequency in Hz for a character, or `undefined` when the character is silent. */
-export const pitchFromCharacter = (
-  char: string,
-  { baseFrequency, scale, octaves, mapping }: VoiceConfig
-): number | undefined =>
-  match(indexFromCharacter(char))
-    .with(P.number, (index) => {
+/** Frequency in Hz for a character index, as this voice realizes it. */
+export const frequencyOf = (
+  index: number,
+  { baseFrequency, pitch }: VoiceConfig
+): number =>
+  match(pitch)
+    .with({ kind: 'scalar' }, ({ scale, octaves, mapping }) => {
       const slot = mappings[mapping](index, scale.length * octaves)
       const octave = Math.floor(slot / scale.length)
       const semitone = scale[slot % scale.length] ?? 0
       return baseFrequency * 2 ** ((semitone + 12 * octave) / 12)
     })
-    .otherwise(() => undefined)
+    .with({ kind: 'drone' }, () => baseFrequency)
+    .with(
+      { kind: 'chromatic' },
+      ({ span }) => baseFrequency * 2 ** ((index % span) / 12)
+    )
+    .exhaustive()

@@ -13,10 +13,6 @@ run = "bun run lint"
 description = "Lint and fix the extension"
 run = "bun run lint:fix"
 
-[tasks.demo]
-description = "Play a phrase through the blip pipeline"
-run = "bun run scripts/demo.ts"
-
 [tasks.audition]
 description = "Play the same phrase through every preset"
 run = "bun run scripts/audition.ts"

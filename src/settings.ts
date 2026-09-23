@@ -12,6 +12,34 @@ import {
 } from './config.ts'
 import { type PresetName, PRESET_NAMES, presets } from './presets.ts'
 
+const readingSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('alphabet') }),
+  z.strictObject({
+    kind: z.literal('codepoint'),
+    span: z.number().int().positive()
+  }),
+  z.strictObject({ kind: z.literal('class') }),
+  z.strictObject({ kind: z.literal('vowels') }),
+  z.strictObject({
+    kind: z.literal('phrase'),
+    span: z.number().int().positive()
+  })
+])
+
+const pitchSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('scalar'),
+    scale: z.array(z.number()).nonempty(),
+    octaves: z.number().int().positive(),
+    mapping: z.enum(['wrap', 'fold'])
+  }),
+  z.strictObject({ kind: z.literal('drone') }),
+  z.strictObject({
+    kind: z.literal('chromatic'),
+    span: z.number().int().positive()
+  })
+])
+
 const voiceSchema = z
   .object({
     enabled: z.boolean(),
@@ -22,9 +50,8 @@ const voiceSchema = z
     material: z.enum(['wood', 'stone', 'ceramic', 'glass']),
     touch: z.enum(['soft', 'normal', 'firm']),
     baseFrequency: z.number().positive(),
-    scale: z.array(z.number()).nonempty(),
-    octaves: z.number().int().positive(),
-    mapping: z.enum(['wrap', 'fold'])
+    reading: readingSchema,
+    pitch: pitchSchema
   })
   .partial()
   .strict()
@@ -95,9 +122,8 @@ const mergeVoice = (
   material: patch.material ?? base.material,
   touch: patch.touch ?? base.touch,
   baseFrequency: patch.baseFrequency ?? base.baseFrequency,
-  scale: patch.scale ?? base.scale,
-  octaves: patch.octaves ?? base.octaves,
-  mapping: patch.mapping ?? base.mapping
+  reading: patch.reading ?? base.reading,
+  pitch: patch.pitch ?? base.pitch
 })
 
 /** Lay a patch over a full config. Presets and config files take the same path. */

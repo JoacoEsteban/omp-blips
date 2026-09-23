@@ -1,5 +1,6 @@
-import type { MappingName } from './mapping.ts'
 import { MAJOR_PENTATONIC, MINOR_PENTATONIC } from './scales.ts'
+import type { PitchConfig } from './pitch.ts'
+import type { ReadingConfig } from './reading.ts'
 import type { Material, Touch } from './synth.ts'
 
 /**
@@ -27,14 +28,12 @@ export interface VoiceConfig {
   readonly material: Material
   /** Strike force for this stream. */
   readonly touch: Touch
-  /** Frequency of scale degree 0. */
+  /** Frequency of index 0, and the whole of a `drone` voice. */
   readonly baseFrequency: number
-  /** Semitone offsets of one octave of the scale. */
-  readonly scale: readonly number[]
-  /** How many octaves the character range is spread over. */
-  readonly octaves: number
-  /** How the alphabet index is folded into the available scale slots. */
-  readonly mapping: MappingName
+  /** How characters become indices: what is voiced, what is silent, what an index means. */
+  readonly reading: ReadingConfig
+  /** How an index becomes a frequency. */
+  readonly pitch: PitchConfig
 }
 
 export interface BlipConfig {
@@ -72,9 +71,13 @@ export const defaultConfig: BlipConfig = {
       material: 'ceramic',
       touch: 'normal',
       baseFrequency: 220,
-      scale: MAJOR_PENTATONIC,
-      octaves: 3,
-      mapping: 'wrap'
+      reading: { kind: 'alphabet' },
+      pitch: {
+        kind: 'scalar',
+        scale: MAJOR_PENTATONIC,
+        octaves: 3,
+        mapping: 'wrap'
+      }
     },
     // Reasoning: a darker voice below the prose. 110 Hz fundamentals are easy to
     // lose on laptop speakers, so it sits at 146.83 Hz (D3) with more gain.
@@ -87,9 +90,13 @@ export const defaultConfig: BlipConfig = {
       material: 'wood',
       touch: 'soft',
       baseFrequency: 146.83,
-      scale: MINOR_PENTATONIC,
-      octaves: 2,
-      mapping: 'fold'
+      reading: { kind: 'alphabet' },
+      pitch: {
+        kind: 'scalar',
+        scale: MINOR_PENTATONIC,
+        octaves: 2,
+        mapping: 'fold'
+      }
     },
     // Tool arguments: short, bright ticks. Dense JSON, so it blips less often.
     tool: {
@@ -101,9 +108,13 @@ export const defaultConfig: BlipConfig = {
       material: 'glass',
       touch: 'soft',
       baseFrequency: 523.25,
-      scale: MAJOR_PENTATONIC,
-      octaves: 2,
-      mapping: 'wrap'
+      reading: { kind: 'alphabet' },
+      pitch: {
+        kind: 'scalar',
+        scale: MAJOR_PENTATONIC,
+        octaves: 2,
+        mapping: 'wrap'
+      }
     }
   }
 }

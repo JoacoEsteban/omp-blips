@@ -17,6 +17,8 @@ import {
 } from 'rxjs'
 import { match } from 'ts-pattern'
 import type { BlipConfig, VoiceConfig } from '../src/config.ts'
+import type { PitchConfig } from '../src/pitch.ts'
+import type { ReadingConfig } from '../src/reading.ts'
 import { play } from '../src/player.ts'
 import { ffplay } from '../src/players/ffplay.ts'
 import { type PresetName, PRESET_NAMES, presets } from '../src/presets.ts'
@@ -215,6 +217,24 @@ const voiceFor = (model: Model): VoiceConfig =>
   match(model.mode)
     .with('prose', () => model.config.voices.text)
     .with('call', () => model.config.voices.tool)
+    .exhaustive()
+
+/** The reading and pitch of a voice, short enough for one status line. */
+const readingLabel = (reading: ReadingConfig): string =>
+  match(reading)
+    .with({ kind: 'codepoint' }, ({ span }) => `codepoint ${String(span)}`)
+    .with({ kind: 'phrase' }, ({ span }) => `phrase ${String(span)}`)
+    .otherwise(({ kind }) => kind)
+
+const pitchLabel = (pitch: PitchConfig): string =>
+  match(pitch)
+    .with(
+      { kind: 'scalar' },
+      ({ scale, octaves, mapping }) =>
+        `scalar ${String(scale.length)} notes ${String(octaves)} oct ${mapping}`
+    )
+    .with({ kind: 'chromatic' }, ({ span }) => `chromatic ${String(span)}`)
+    .with({ kind: 'drone' }, () => 'drone')
     .exhaustive()
 
 const voicingFor = (model: Model): Voicing => {
@@ -480,6 +500,7 @@ const createLabApp = (
       choiceLine('material', MATERIALS, model.materialIndex),
       '',
       `${accent('sound')}  ${voice.touch} touch  ${String(voice.toneMs)} ms  ${voice.baseFrequency.toFixed(2)} Hz  every ${String(voice.charsPerBlip)} chars`,
+      `${accent('voice')}  ${readingLabel(voice.reading)} -> ${pitchLabel(voice.pitch)}`,
       `${accent('preset')} ${presets[preset].description}`,
       speedSlider(model.streamSpeedIndex),
       `${accent('stream')} ${model.mode} ${status}`

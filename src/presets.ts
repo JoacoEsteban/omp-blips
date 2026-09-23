@@ -51,9 +51,13 @@ export const presets: Record<PresetName, Preset> = {
           material: 'ceramic',
           touch: 'firm',
           baseFrequency: 440,
-          scale: MAJOR_PENTATONIC,
-          octaves: 3,
-          mapping: 'wrap'
+          reading: { kind: 'alphabet' },
+          pitch: {
+            kind: 'scalar',
+            scale: MAJOR_PENTATONIC,
+            octaves: 3,
+            mapping: 'wrap'
+          }
         },
         thinking: {
           charsPerBlip: 3,
@@ -62,9 +66,8 @@ export const presets: Record<PresetName, Preset> = {
           material: 'wood',
           touch: 'normal',
           baseFrequency: 220,
-          scale: BLUES,
-          octaves: 2,
-          mapping: 'wrap'
+          reading: { kind: 'alphabet' },
+          pitch: { kind: 'scalar', scale: BLUES, octaves: 2, mapping: 'wrap' }
         },
         tool: {
           charsPerBlip: 4,
@@ -73,9 +76,10 @@ export const presets: Record<PresetName, Preset> = {
           material: 'ceramic',
           touch: 'firm',
           baseFrequency: 880,
-          scale: MAJOR_PENTATONIC,
-          octaves: 2,
-          mapping: 'wrap'
+          // Dense JSON read character by character, semitones apart: an arcade
+          // machine reporting progress, not a melody.
+          reading: { kind: 'codepoint', span: 16 },
+          pitch: { kind: 'chromatic', span: 7 }
         }
       }
     }
@@ -96,9 +100,14 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'normal',
           baseFrequency: 415.3,
-          scale: HIRAJOSHI,
-          octaves: 2,
-          mapping: 'fold'
+          // Each word is a ringing run, and the runs climb across a sentence.
+          reading: { kind: 'phrase', span: 4 },
+          pitch: {
+            kind: 'scalar',
+            scale: HIRAJOSHI,
+            octaves: 2,
+            mapping: 'fold'
+          }
         },
         thinking: {
           charsPerBlip: 8,
@@ -107,9 +116,8 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'normal',
           baseFrequency: 155.56,
-          scale: KUMOI,
-          octaves: 2,
-          mapping: 'fold'
+          reading: { kind: 'phrase', span: 3 },
+          pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
         },
         tool: {
           charsPerBlip: 10,
@@ -118,9 +126,9 @@ export const presets: Record<PresetName, Preset> = {
           material: 'ceramic',
           touch: 'firm',
           baseFrequency: 830.61,
-          scale: HIRAJOSHI,
-          octaves: 2,
-          mapping: 'wrap'
+          // One struck pitch under the tails of the other two voices.
+          reading: { kind: 'class' },
+          pitch: { kind: 'drone' }
         }
       }
     }
@@ -134,40 +142,39 @@ export const presets: Record<PresetName, Preset> = {
       minIntervalMs: 420,
       voices: {
         text: {
-          charsPerBlip: 14,
+          charsPerBlip: 5,
           toneMs: 680,
           decay: 0.25,
           volume: 0.34,
           material: 'glass',
           touch: 'soft',
           baseFrequency: 174.61,
-          scale: MINOR_PENTATONIC,
-          octaves: 1,
-          mapping: 'fold'
+          // Vowels only, on one pitch: a ping per few words, and nothing in
+          // between. Consonants would make it a melody again.
+          reading: { kind: 'vowels' },
+          pitch: { kind: 'drone' }
         },
         thinking: {
-          charsPerBlip: 18,
+          charsPerBlip: 6,
           toneMs: 840,
           decay: 0.25,
           volume: 0.3,
           material: 'glass',
           touch: 'soft',
           baseFrequency: 98,
-          scale: MINOR_PENTATONIC,
-          octaves: 1,
-          mapping: 'fold'
+          reading: { kind: 'vowels' },
+          pitch: { kind: 'drone' }
         },
         tool: {
-          charsPerBlip: 20,
+          charsPerBlip: 6,
           toneMs: 520,
           decay: 0.3,
           volume: 0.24,
           material: 'glass',
           touch: 'soft',
           baseFrequency: 261.63,
-          scale: MINOR_PENTATONIC,
-          octaves: 1,
-          mapping: 'wrap'
+          reading: { kind: 'vowels' },
+          pitch: { kind: 'drone' }
         }
       }
     }
@@ -187,9 +194,10 @@ export const presets: Record<PresetName, Preset> = {
           material: 'wood',
           touch: 'firm',
           baseFrequency: 987.77,
-          scale: MAJOR_PENTATONIC,
-          octaves: 1,
-          mapping: 'fold'
+          // Four character classes over two semitones: the pitch barely moves,
+          // so the ear hears the keys and not the letters.
+          reading: { kind: 'class' },
+          pitch: { kind: 'chromatic', span: 2 }
         },
         thinking: {
           charsPerBlip: 3,
@@ -198,9 +206,8 @@ export const presets: Record<PresetName, Preset> = {
           material: 'wood',
           touch: 'firm',
           baseFrequency: 493.88,
-          scale: MINOR_PENTATONIC,
-          octaves: 1,
-          mapping: 'fold'
+          reading: { kind: 'class' },
+          pitch: { kind: 'chromatic', span: 2 }
         },
         tool: {
           charsPerBlip: 3,
@@ -209,9 +216,8 @@ export const presets: Record<PresetName, Preset> = {
           material: 'wood',
           touch: 'firm',
           baseFrequency: 1318.51,
-          scale: MAJOR_PENTATONIC,
-          octaves: 1,
-          mapping: 'wrap'
+          reading: { kind: 'class' },
+          pitch: { kind: 'drone' }
         }
       }
     }
@@ -230,9 +236,9 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'normal',
           baseFrequency: 1046.5,
-          scale: KUMOI,
-          octaves: 2,
-          mapping: 'fold'
+          // Stepwise runs per word, six words to a turn of the crank.
+          reading: { kind: 'phrase', span: 6 },
+          pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
         },
         thinking: {
           charsPerBlip: 5,
@@ -241,9 +247,8 @@ export const presets: Record<PresetName, Preset> = {
           material: 'ceramic',
           touch: 'soft',
           baseFrequency: 523.25,
-          scale: KUMOI,
-          octaves: 2,
-          mapping: 'fold'
+          reading: { kind: 'phrase', span: 6 },
+          pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
         },
         tool: {
           charsPerBlip: 8,
@@ -252,9 +257,13 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'normal',
           baseFrequency: 1567.98,
-          scale: MAJOR_PENTATONIC,
-          octaves: 1,
-          mapping: 'fold'
+          reading: { kind: 'phrase', span: 4 },
+          pitch: {
+            kind: 'scalar',
+            scale: MAJOR_PENTATONIC,
+            octaves: 1,
+            mapping: 'fold'
+          }
         }
       }
     }
@@ -267,19 +276,34 @@ export const presets: Record<PresetName, Preset> = {
       minIntervalMs: 190,
       voices: {
         text: {
-          charsPerBlip: 7,
+          charsPerBlip: 3,
           toneMs: 70,
           volume: 0.14,
-          mapping: 'fold',
           material: 'wood',
-          touch: 'soft'
+          touch: 'soft',
+          // Vowels carry the line; consonants are the noise you do not want in
+          // a shared room.
+          reading: { kind: 'vowels' },
+          pitch: {
+            kind: 'scalar',
+            scale: MINOR_PENTATONIC,
+            octaves: 2,
+            mapping: 'fold'
+          }
         },
         thinking: {
-          charsPerBlip: 10,
+          charsPerBlip: 4,
           toneMs: 110,
           volume: 0.1,
           material: 'wood',
-          touch: 'soft'
+          touch: 'soft',
+          reading: { kind: 'vowels' },
+          pitch: {
+            kind: 'scalar',
+            scale: MINOR_PENTATONIC,
+            octaves: 2,
+            mapping: 'fold'
+          }
         },
         tool: { enabled: false, material: 'wood', touch: 'soft' }
       }

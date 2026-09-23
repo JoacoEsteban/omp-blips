@@ -22,7 +22,8 @@ import {
 } from 'rxjs'
 import { match, P } from 'ts-pattern'
 import type { StreamKind, VoiceConfig } from './config.ts'
-import { pitchFromCharacter } from './pitch.ts'
+import { frequencyOf } from './pitch.ts'
+import { type Reading, type ReadingConfig, readingOf } from './reading.ts'
 import type { Tone } from './players/types.ts'
 
 /** A slice of one stream kind, exactly as the agent delivered it. */
@@ -86,13 +87,30 @@ interface Paced extends Blip {
   readonly paceMs: number
 }
 
-/** The running count for one voice, plus whatever the last character produced. */
+/**
+ * The running count for one voice, plus whatever the last character produced.
+ * `cursor` is the reading mid-stream; `source` is the config it came from, so a
+ * voice that changes its reading starts a new phrase instead of continuing an
+ * old one in a new shape.
+ */
 interface Count {
   readonly pending: number
   readonly blip: Paced | undefined
+  readonly cursor: Reading | undefined
+  readonly source: ReadingConfig | undefined
 }
 
-const SILENT: Count = { pending: 0, blip: undefined }
+const SILENT: Count = {
+  pending: 0,
+  blip: undefined,
+  cursor: undefined,
+  source: undefined
+}
+
+const cursorOf = ({ cursor, source }: Count, reading: ReadingConfig): Reading =>
+  match({ cursor, stale: source !== reading })
+    .with({ cursor: P.nonNullable, stale: false }, ({ cursor: live }) => live)
+    .otherwise(() => readingOf(reading))
 
 const toneOf = (voice: VoiceConfig, frequency: number): Tone => ({
   frequency,
@@ -114,25 +132,28 @@ const strike = (
   { voice, minIntervalMs }: Voicing
 ): Count =>
   match(voice)
-    .with(P.nullish, () => ({ pending: count.pending, blip: undefined }))
-    .otherwise((voiced) =>
-      match(pitchFromCharacter(char, voiced))
-        .with(P.nullish, () => ({ pending: count.pending, blip: undefined }))
-        .otherwise((frequency) => {
+    .with(P.nullish, () => ({ ...count, blip: undefined }))
+    .otherwise((voiced) => {
+      const [cursor, index] = cursorOf(count, voiced.reading).read(char)
+      const carried = { ...count, cursor, source: voiced.reading }
+      return match(index)
+        .with(P.nullish, () => ({ ...carried, blip: undefined }))
+        .otherwise((voicedIndex) => {
           const pending = count.pending + 1
           return match(pending >= voiced.charsPerBlip)
-            .with(false, () => ({ pending, blip: undefined }))
+            .with(false, () => ({ ...carried, pending, blip: undefined }))
             .with(true, () => ({
+              ...carried,
               pending: 0,
               blip: {
                 char,
-                tone: toneOf(voiced, frequency),
+                tone: toneOf(voiced, frequencyOf(voicedIndex, voiced)),
                 paceMs: minIntervalMs
               }
             }))
             .exhaustive()
         })
-    )
+    })
 
 /**
  * Drop values that arrive inside the interval their predecessor asked for. A
