@@ -25,7 +25,6 @@ import { ffplay } from '../src/players/ffplay.ts'
 import { type PresetName, PRESET_NAMES, presets } from '../src/presets.ts'
 import { loadSettings } from '../src/settings.ts'
 import { tonesFrom, type Voicing } from '../src/stream.ts'
-import type { Material } from '../src/synth.ts'
 
 const DEFAULT_STREAM_DELAY_MS = 10
 const MIN_STREAM_DELAY_MS = 1
@@ -34,14 +33,6 @@ const STREAM_SPEED_JUMPS = 50
 const DEFAULT_WIDTH = 100
 const DEFAULT_HEIGHT = 24
 const CALL_GENERATION_ATTEMPTS = 8
-const MATERIALS: readonly Material[] = [
-  'wood',
-  'stone',
-  'ceramic',
-  'glass',
-  'reed',
-  'brass'
-]
 
 const style = chalkStyle()
 const accent = (text: string): string => style.bold(style.hex('#22d3ee', text))
@@ -55,7 +46,6 @@ interface Model {
   readonly width: number
   readonly height: number
   readonly presetIndex: number
-  readonly materialIndex: number
   readonly config: BlipConfig
   readonly mode: StreamMode
   readonly proseSample: string
@@ -148,17 +138,8 @@ interface GeneratedCall {
   readonly error: string
 }
 
-const configFor = (preset: PresetName, material: Material): BlipConfig => {
-  const { config } = loadSettings(process.cwd(), preset)
-  return {
-    ...config,
-    voices: {
-      text: { ...config.voices.text, material },
-      thinking: { ...config.voices.thinking, material },
-      tool: { ...config.voices.tool, material }
-    }
-  }
-}
+const configFor = (preset: PresetName): BlipConfig =>
+  loadSettings(process.cwd(), preset).config
 
 const generateProseSample = (): string =>
   loremIpsum({ count: 3, units: 'paragraphs' })
@@ -391,15 +372,7 @@ const restarted = (model: Model, previewLimit: number): Model =>
 const withPreset = (model: Model, delta: number): Model => {
   const presetIndex = cycle(model.presetIndex, delta, PRESET_NAMES.length)
   const preset = PRESET_NAMES[presetIndex] ?? 'default'
-  const material = MATERIALS[model.materialIndex] ?? 'ceramic'
-  return { ...model, presetIndex, config: configFor(preset, material) }
-}
-
-const withMaterial = (model: Model, delta: number): Model => {
-  const materialIndex = cycle(model.materialIndex, delta, MATERIALS.length)
-  const preset = PRESET_NAMES[model.presetIndex] ?? 'default'
-  const material = MATERIALS[materialIndex] ?? 'ceramic'
-  return { ...model, materialIndex, config: configFor(preset, material) }
+  return { ...model, presetIndex, config: configFor(preset) }
 }
 
 const rewound = (model: Model): Model => ({
@@ -418,7 +391,6 @@ const createLabApp = (
       width: DEFAULT_WIDTH,
       height: DEFAULT_HEIGHT,
       presetIndex: 0,
-      materialIndex: MATERIALS.indexOf(initialConfig.voices.text.material),
       config: initialConfig,
       mode: 'prose',
       proseSample: generateProseSample(),
@@ -504,8 +476,6 @@ const createLabApp = (
           )
           .with({ key: 'left' }, () => tuned(lab, withPreset(model, -1)))
           .with({ key: 'right' }, () => tuned(lab, withPreset(model, 1)))
-          .with({ key: 'up' }, () => tuned(lab, withMaterial(model, -1)))
-          .with({ key: 'down' }, () => tuned(lab, withMaterial(model, 1)))
           .otherwise(() => [model, []])
       )
       .with({ type: 'resize' }, (resize): [Model, Cmd<Msg>[]] => [
@@ -550,7 +520,6 @@ const createLabApp = (
         modeIndex(model.mode)
       ),
       choiceLine('preset', PRESET_NAMES, model.presetIndex),
-      choiceLine('material', MATERIALS, model.materialIndex),
       '',
       `${accent('sound')}  ${voice.touch} touch  ${String(voice.toneMs)} ms  ${voice.baseFrequency.toFixed(2)} Hz  swell ${voice.swell.toFixed(2)}  hold ${voice.hold.toFixed(2)}  glide ${voice.glide.toFixed(1)}st`,
       `${accent('voice')}  ${readingLabel(voice.reading)} -> ${pitchLabel(voice.pitch)}  colour ${colorLabel(voice.color)}`,
@@ -563,7 +532,7 @@ const createLabApp = (
     const preview = previewFor(model)
 
     const footerText =
-      'tab mode   r regenerate   ←/→ preset   ↑/↓ material   [ / ] speed   space pause   q quit'
+      'tab mode   r regenerate   ←/→ preset   [ / ] speed   space pause   q quit'
     const footer = wrapPreview(footerText, model.width).map((line) =>
       muted(line)
     )
@@ -577,8 +546,7 @@ const createLabApp = (
   }
 })
 
-const initialMaterial: Material = 'ceramic'
-const initialConfig = configFor('default', initialMaterial)
+const initialConfig = configFor('default')
 const lab = createLab({
   voice: initialConfig.voices.text,
   minIntervalMs: initialConfig.minIntervalMs
