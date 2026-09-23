@@ -2,10 +2,8 @@ import { match } from 'ts-pattern'
 import {
   CEILING,
   RELEASE_FRAMES,
-  resonance,
   SAMPLE_RATE,
   VOICE_GAIN,
-  type Formant,
   type Sound,
   type Touch
 } from './synth.ts'
@@ -13,18 +11,12 @@ import {
   BODY_ENVELOPE,
   CYCLE_FRACTIONS,
   CYCLE_VARIATION,
-  F1_GLIDE_FRACTIONS,
-  F1_GLIDE_HZ,
-  FORMANT_SWEEP,
-  FORMANTS,
   HARMONIC_CUTOFF_HZ,
+  HARMONIC_ENVELOPE_FRACTIONS,
+  HARMONIC_ENVELOPE_GAINS,
   HARMONIC_PHASES,
   PITCH_CHIRP,
   PROFILE_FREQUENCY,
-  SOURCE_TILT,
-  TEXTURE_BANDS_HZ,
-  TEXTURE_FRACTIONS,
-  TEXTURE_GAINS,
   UPPER_ATTACK_MS,
   UPPER_BANDS
 } from './vocal-profile.ts'
@@ -83,54 +75,28 @@ const interpolateAt = (
   return lowerValue + (upperValue - lowerValue) * t
 }
 
-/** Which measured texture band a lower harmonic's nominal frequency falls in. */
-const textureBandOf = (harmonicHz: number): number => {
-  const index = TEXTURE_BANDS_HZ.findIndex(([, high]) => harmonicHz < high)
-  return match(index)
-    .with(-1, () => TEXTURE_BANDS_HZ.length - 1)
-    .otherwise((found) => found)
-}
-
 interface VocalPartial {
   readonly ratio: number
   readonly gain: number
-  /** Formant-shaped gain at each `F1_GLIDE_FRACTIONS` knot; lower partials only. */
-  readonly glideGains: readonly number[]
-  readonly textureBand: number
+  /** Measured gain at each `HARMONIC_ENVELOPE_FRACTIONS` knot; lower partials only. */
+  readonly envelopeGains: readonly number[]
   readonly isUpper: boolean
   phase: number
   decay: number
 }
 
-/** The fixed harmonic weights and formant shaping, independent of the tone length. */
+/** The fixed harmonic weights, independent of the tone length. */
 const partialsFor = (sound: Sound): readonly VocalPartial[] => {
   const nyquist = SAMPLE_RATE / 2
-  const formantsAt = (f1Hz: number): readonly Formant[] =>
-    FORMANTS.map((formant, index) =>
-      match(index)
-        .with(0, () => ({ ...formant, hz: f1Hz }))
-        .with(1, () => ({
-          ...formant,
-          hz: formant.hz + (sound.color - 0.5) * FORMANT_SWEEP
-        }))
-        .otherwise(() => formant)
-    )
   const partials: VocalPartial[] = []
   const cutoffHarmonic = Math.floor(HARMONIC_CUTOFF_HZ / PROFILE_FREQUENCY)
-  const lowerTrim = 2.24
+  const lowerTrim = 0.9
   for (let n = 1; n <= cutoffHarmonic; n += 1) {
     if (n * sound.frequency >= nyquist) break
-    const glideGains = F1_GLIDE_HZ.map((f1Hz) =>
-      formantsAt(f1Hz).reduce(
-        (sum, formant) => sum + resonance(n * PROFILE_FREQUENCY, formant),
-        0
-      )
-    )
     partials.push({
       ratio: n,
-      gain: lowerTrim / n ** SOURCE_TILT,
-      glideGains,
-      textureBand: textureBandOf(n * PROFILE_FREQUENCY),
+      gain: lowerTrim,
+      envelopeGains: HARMONIC_ENVELOPE_GAINS[n - 1] ?? [],
       isUpper: false,
       phase: 0,
       decay: 1
@@ -145,8 +111,7 @@ const partialsFor = (sound: Sound): readonly VocalPartial[] => {
       partials.push({
         ratio: n,
         gain: 0.4 * bandTrim * (band.weights[index] ?? 0),
-        glideGains: [],
-        textureBand: -1,
+        envelopeGains: [],
         isUpper: true,
         phase: 0,
         decay: 1
@@ -160,10 +125,12 @@ const partialsFor = (sound: Sound): readonly VocalPartial[] => {
  * The dedicated procedural renderer for the `vocal` material. Unlike the
  * generic modal path, its harmonic source is a chirp fitted to the approved
  * Sans audition: the fundamental rises across the tone, each harmonic keeps
- * its own measured phase and (below `HARMONIC_CUTOFF_HZ`) is shaped by three
- * fixed formants; a brighter set of upper harmonics keeps its own fixed
- * weights. A measured envelope and small cycle-to-cycle pitch wobble sit on
- * top of the ordinary `swell`/`hold`/`decay` controls.
+ * its own measured phase and (below `HARMONIC_CUTOFF_HZ`) its own measured
+ * envelope, read directly off the recording's spectral shape over time
+ * rather than approximated from a handful of formants; a brighter set of
+ * upper harmonics keeps its own fixed weights. A measured body envelope and
+ * small cycle-to-cycle pitch wobble sit on top of the ordinary
+ * `swell`/`hold`/`decay` controls.
  */
 export const renderVocal = (
   sound: Sound & { readonly material: 'vocal' }
@@ -225,33 +192,32 @@ export const renderVocal = (
         SAMPLE_RATE
       const phaseFit = HARMONIC_PHASES[partial.ratio] ?? 0
       const totalPhase = partial.phase + phaseFit
-      const textureGain = match(partial.isUpper)
+      const envelopeGain = match(partial.isUpper)
         .with(true, () => 1)
         .otherwise(() =>
           interpolateAt(
-            TEXTURE_FRACTIONS,
-            TEXTURE_GAINS[partial.textureBand] ?? [],
+            HARMONIC_ENVELOPE_FRACTIONS,
+            partial.envelopeGains,
             fraction
           )
         )
       const onset = match(partial.isUpper)
         .with(true, () => upperOnset)
         .otherwise(() => 1)
-      const formantGain = match(partial.isUpper)
-        .with(true, () => 1)
-        .otherwise(() =>
-          interpolateAt(F1_GLIDE_FRACTIONS, partial.glideGains, fraction)
-        )
       resonances +=
         Math.sin(totalPhase) *
         partial.gain *
-        textureGain *
-        formantGain *
+        envelopeGain *
         partial.decay *
         onset
       partial.phase += phaseStep
       if (i > holdFrames) {
-        const decayRate = MODAL_DECAY * (0.5 + partial.ratio * 0.08)
+        // The measured envelope already carries each lower harmonic's real
+        // decay shape; only the explicit upper-band harmonics (uncovered by
+        // that measurement) still need a synthetic per-harmonic decay rate.
+        const decayRate = match(partial.isUpper)
+          .with(true, () => MODAL_DECAY * (0.5 + partial.ratio * 0.08))
+          .otherwise(() => MODAL_DECAY * 0.5)
         partial.decay *= Math.exp(
           -(decayRate * sound.decay) / Math.max(1, frames - 1)
         )

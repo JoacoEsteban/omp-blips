@@ -19,49 +19,159 @@ export const PITCH_CHIRP = {
 }
 
 /**
- * Three fixed resonances shape the harmonic source, the same way `reed` and
- * `brass` do. The first resonance sits on the second harmonic, which is the
- * low, rounded part of the register; the other two stay quiet.
+ * How each lower harmonic's level, relative to the fundamental, moves across
+ * the tone. Measured directly from the recording: 14th-order LPC (bandwidth-
+ * expanded to damp narrow-window numerical spikes), 24 ms Hamming windows
+ * every 6 ms, spectral envelope read at each harmonic's instantaneous
+ * frequency (from `PITCH_CHIRP`) and normalized to the fundamental at that
+ * same instant. This replaces separately fitting formants, a source tilt,
+ * one hand-picked formant glide, and a coarse 4-band texture curve - all of
+ * that shape is a single side effect of the vocal tract moving, so it comes
+ * from one measurement instead of several independent approximations of it.
+ * `color` no longer articulates a formant sweep: the fit is a single
+ * recorded vowel, not a family of vowels, so there is nothing to sweep to.
  */
-export const FORMANTS: readonly {
-  readonly hz: number
-  readonly bw: number
-  readonly gain: number
-}[] = [
-  { hz: 450, bw: 160, gain: 1 },
-  { hz: 1850, bw: 220, gain: 0.8 },
-  { hz: 2800, bw: 200, gain: 0.3 }
+export const HARMONIC_ENVELOPE_FRACTIONS: readonly number[] = [
+  0.0571, 0.1, 0.1429, 0.1857, 0.2286, 0.2714, 0.3143, 0.3571, 0.4, 0.4429,
+  0.4857, 0.5286, 0.5714, 0.6143, 0.6571, 0.7, 0.7429, 0.7857, 0.8286
 ]
-
-/**
- * The first formant is not static in the recording: LPC tracking (12th-order,
- * 10 kHz downsample, 30 ms Hamming windows) shows it falling from ~430 Hz to
- * ~280 Hz across the tone as the mouth closes from an open vowel toward the
- * brief close-front tail the recording ends on; the last two knots
- * extrapolate that closing motion through the tail LPC can't resolve
- * cleanly (energy too low, windows too short). `F2`/`F3` were noisier in the
- * same tracking and are left static for now so this stays an isolated change.
- */
-export const F1_GLIDE_FRACTIONS: readonly number[] = [
-  10 / 140,
-  26 / 140,
-  42 / 140,
-  56 / 140,
-  70 / 140,
-  86 / 140,
-  98 / 140,
-  120 / 140,
-  1
+export const HARMONIC_ENVELOPE_GAINS: readonly (readonly number[])[] = [
+  [
+    1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+    1.0, 1.0, 1.0, 1.0
+  ],
+  [
+    0.8909, 0.9125, 0.9625, 1.001, 1.0222, 1.1973, 1.2869, 1.3241, 1.3541,
+    1.4546, 1.5245, 1.6141, 1.5488, 1.1668, 0.8763, 0.6955, 0.5014, 0.522,
+    0.6704
+  ],
+  [
+    0.8631, 0.8521, 0.8164, 0.5811, 0.4545, 0.3769, 0.3483, 0.3243, 0.2929,
+    0.2748, 0.2637, 0.2633, 0.2599, 0.2167, 0.1827, 0.1666, 0.1445, 0.1927,
+    0.2915
+  ],
+  [
+    0.332, 0.3175, 0.2989, 0.2318, 0.1897, 0.1619, 0.1507, 0.1415, 0.1306,
+    0.1228, 0.1178, 0.1177, 0.1172, 0.1014, 0.0904, 0.0862, 0.0789, 0.1143,
+    0.1773
+  ],
+  [
+    0.2003, 0.192, 0.1861, 0.1508, 0.126, 0.1126, 0.1056, 0.0996, 0.0932,
+    0.0878, 0.084, 0.0842, 0.0845, 0.0741, 0.0692, 0.0688, 0.0652, 0.1036,
+    0.1697
+  ],
+  [
+    0.1734, 0.1665, 0.1667, 0.1385, 0.1167, 0.1103, 0.1048, 0.0991, 0.094,
+    0.0885, 0.0842, 0.0851, 0.0862, 0.0761, 0.0757, 0.0804, 0.0788, 0.1397,
+    0.2395
+  ],
+  [
+    0.2085, 0.2006, 0.209, 0.1782, 0.1519, 0.1561, 0.154, 0.1467, 0.1423,
+    0.1337, 0.126, 0.129, 0.1316, 0.1174, 0.13, 0.159, 0.1526, 0.1893, 0.2477
+  ],
+  [
+    0.3665, 0.3575, 0.3816, 0.3437, 0.3087, 0.3543, 0.4139, 0.4425, 0.4705,
+    0.465, 0.4325, 0.4381, 0.3464, 0.3225, 0.3472, 0.2641, 0.1826, 0.1553,
+    0.2243
+  ],
+  [
+    0.4099, 0.414, 0.3988, 0.3286, 0.2846, 0.2525, 0.2341, 0.2308, 0.2278,
+    0.2201, 0.2147, 0.2105, 0.193, 0.1831, 0.1855, 0.1542, 0.1375, 0.168, 0.1651
+  ],
+  [
+    0.2751, 0.2746, 0.282, 0.2252, 0.1867, 0.1804, 0.1639, 0.1577, 0.1575,
+    0.1493, 0.1443, 0.1499, 0.1548, 0.1569, 0.1982, 0.1922, 0.1596, 0.0764,
+    0.063
+  ],
+  [
+    0.3139, 0.3167, 0.3411, 0.2679, 0.2187, 0.2265, 0.2067, 0.1984, 0.1991,
+    0.19, 0.1875, 0.212, 0.2432, 0.2429, 0.1519, 0.1074, 0.0726, 0.05, 0.05
+  ],
+  [
+    0.659, 0.722, 0.7997, 0.6522, 0.5232, 0.514, 0.442, 0.3547, 0.3219, 0.4052,
+    0.3903, 0.324, 0.2112, 0.1188, 0.072, 0.0535, 0.05, 0.05, 0.05
+  ],
+  [
+    0.2397, 0.2427, 0.2996, 0.2768, 0.227, 0.2671, 0.2352, 0.189, 0.1907,
+    0.2364, 0.1919, 0.1473, 0.1045, 0.0692, 0.0531, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.1334, 0.1368, 0.1758, 0.1622, 0.1341, 0.1682, 0.1562, 0.1317, 0.1412,
+    0.1684, 0.1423, 0.1164, 0.0862, 0.0643, 0.0579, 0.05, 0.05, 0.05, 0.06
+  ],
+  [
+    0.1135, 0.1203, 0.1605, 0.1548, 0.1323, 0.1663, 0.1613, 0.1364, 0.1485,
+    0.1866, 0.1781, 0.1485, 0.1082, 0.0952, 0.0984, 0.0745, 0.05, 0.0501, 0.05
+  ],
+  [
+    0.1355, 0.1521, 0.2071, 0.2235, 0.2126, 0.2433, 0.2371, 0.1939, 0.2042,
+    0.2663, 0.3611, 0.3136, 0.212, 0.1429, 0.1126, 0.0731, 0.05, 0.05, 0.05
+  ],
+  [
+    0.2484, 0.3043, 0.3711, 0.4797, 0.5098, 0.4995, 0.4145, 0.3327, 0.3436,
+    0.3692, 0.3311, 0.2608, 0.1576, 0.0771, 0.0551, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.491, 0.4621, 0.3512, 0.2808, 0.2701, 0.2229, 0.17, 0.1647, 0.1648, 0.188,
+    0.2132, 0.1501, 0.0845, 0.0515, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.2054, 0.1965, 0.1364, 0.1014, 0.1118, 0.0877, 0.0613, 0.0608, 0.062,
+    0.0676, 0.074, 0.0667, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.0865, 0.0727, 0.057, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.0644, 0.0681, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.0571, 0.0659, 0.0707, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.0719, 0.0613, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ],
+  [
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+    0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+  ]
 ]
-export const F1_GLIDE_HZ: readonly number[] = [
-  432, 400, 353, 337, 330, 316, 293, 260, 235
-]
-
-/** How far `color` slides the second formant, in Hz. */
-export const FORMANT_SWEEP = 460
-
-/** Fall of the harmonic source spectrum below the cutoff, as `1 / n ** tilt`. */
-export const SOURCE_TILT = 0.4
 
 /** Harmonics above this settle into the explicit `UPPER_BANDS` weights instead. */
 export const HARMONIC_CUTOFF_HZ = 5200
@@ -86,34 +196,8 @@ export const HARMONIC_PHASES: readonly number[] = [
 ]
 
 /**
- * How the lower harmonics' balance changes over the tone: one gain per band
- * per time knot, `bands[band][knot]`. `TEXTURE_FRACTIONS` gives each knot's
- * position as a fraction of the tone; the renderer interpolates and clamps at
- * the ends.
- */
-export const TEXTURE_FRACTIONS: readonly number[] = [
-  20 / 115,
-  40 / 115,
-  60 / 115,
-  80 / 115,
-  100 / 115
-]
-export const TEXTURE_BANDS_HZ: readonly (readonly [number, number])[] = [
-  [80, 700],
-  [700, 1600],
-  [1600, 2300],
-  [2300, 5200]
-]
-export const TEXTURE_GAINS: readonly (readonly number[])[] = [
-  [1, 1, 1, 1, 1],
-  [1.0547, 0.8763, 1.082, 0.7139, 0.7043],
-  [1.4445, 0.9571, 0.7233, 0.4995, 0.3677],
-  [1.1761, 0.9582, 0.8874, 0.4168, 0.35]
-]
-
-/**
  * Harmonics above `HARMONIC_CUTOFF_HZ` use these fixed weights directly
- * instead of the `1 / n ** tilt` falloff, so the brighter, deliberately
+ * instead of the measured envelope, so the brighter, deliberately
  * emphasized upper band keeps its approved balance.
  */
 export const UPPER_BANDS: readonly {
