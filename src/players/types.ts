@@ -1,4 +1,4 @@
-import type { Sound } from "../synth.ts"
+import type { Sound } from '../synth.ts'
 
 /** One scheduled blip: everything a backend needs to make a sound. */
 export interface Tone extends Sound {

@@ -2,7 +2,7 @@
  * How a character's alphabet index is folded into the scale slots available to
  * a voice. Named presets so a voice can pick its melodic behaviour.
  */
-export type MappingName = "wrap" | "fold"
+export type MappingName = 'wrap' | 'fold'
 
 /** `index` is the character's position in the alphabet, `slots` is `scale.length * octaves`. */
 export type Mapping = (index: number, slots: number) => number
@@ -21,9 +21,9 @@ const wrap: Mapping = (index, slots) => index % slots
  * inaudible, since nobody tracks absolute letter order by ear.
  */
 const fold: Mapping = (index, slots) => {
- const span = Math.max(1, slots - 1)
- const position = index % (span * 2)
- return position <= span ? position : span * 2 - position
+  const span = Math.max(1, slots - 1)
+  const position = index % (span * 2)
+  return position <= span ? position : span * 2 - position
 }
 
 export const mappings: Record<MappingName, Mapping> = { wrap, fold }

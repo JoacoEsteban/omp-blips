@@ -1,6 +1,6 @@
-import { match, P } from "ts-pattern"
-import type { VoiceConfig } from "./config.ts"
-import { mappings } from "./mapping.ts"
+import { match, P } from 'ts-pattern'
+import type { VoiceConfig } from './config.ts'
+import { mappings } from './mapping.ts'
 
 const CODE_a = 97
 const CODE_z = 122
@@ -15,21 +15,24 @@ const LETTER_COUNT = CODE_z - CODE_a + 1
  * rhythm follows words instead of hammering a constant tone.
  */
 const indexFromCharacter = (char: string): number | undefined =>
- match(char.toLowerCase().codePointAt(0))
-  .with(P.number.between(CODE_a, CODE_z), (code) => code - CODE_a)
-  .with(P.number.between(CODE_0, CODE_9), (code) => LETTER_COUNT + (code - CODE_0))
-  .otherwise(() => undefined)
+  match(char.toLowerCase().codePointAt(0))
+    .with(P.number.between(CODE_a, CODE_z), (code) => code - CODE_a)
+    .with(
+      P.number.between(CODE_0, CODE_9),
+      (code) => LETTER_COUNT + (code - CODE_0)
+    )
+    .otherwise(() => undefined)
 
 /** Frequency in Hz for a character, or `undefined` when the character is silent. */
 export const pitchFromCharacter = (
- char: string,
- { baseFrequency, scale, octaves, mapping }: VoiceConfig,
+  char: string,
+  { baseFrequency, scale, octaves, mapping }: VoiceConfig
 ): number | undefined =>
- match(indexFromCharacter(char))
-  .with(P.number, (index) => {
-   const slot = mappings[mapping](index, scale.length * octaves)
-   const octave = Math.floor(slot / scale.length)
-   const semitone = scale[slot % scale.length] ?? 0
-   return baseFrequency * 2 ** ((semitone + 12 * octave) / 12)
-  })
-  .otherwise(() => undefined)
+  match(indexFromCharacter(char))
+    .with(P.number, (index) => {
+      const slot = mappings[mapping](index, scale.length * octaves)
+      const octave = Math.floor(slot / scale.length)
+      const semitone = scale[slot % scale.length] ?? 0
+      return baseFrequency * 2 ** ((semitone + 12 * octave) / 12)
+    })
+    .otherwise(() => undefined)
