@@ -182,7 +182,7 @@ The six presets after `quiet` each show one reading or one pitch with nothing in
 - `hexdump` reads the tool arguments character by character. It is the one preset in which the
   tool voice leads.
 
-`sans` uses the dedicated `vocal` material for a low character voice. Each text blip lasts 115 milliseconds
+`sans` uses the dedicated `vocal` material for a low character voice. Each text blip lasts 140 milliseconds
 at 164.81 Hz. It rises across its first 15%, holds until its midpoint, then fades.
 The character interval remains 66 milliseconds, independent of the blip duration.
 One fixed colour value gives each character the same vocal shape.
@@ -196,6 +196,11 @@ runtime procedure. The preset does not load a sampled recording and does not req
 Those controls are one value, not code. `src/vocal.ts` renders any `VocalProfile`, `src/vocal-profile.ts`
 holds the Sans fit as one such value, and `src/synth.ts` maps each vocal material to its profile.
 A second fitted voice is a second profile file and one more material name.
+
+A profile is built through the constructors in `src/curve.ts`, not written as parallel lists. A `Curve`
+carries its own knots: `measured` places its values at the cadence they were measured at, over the
+115 millisecond blip the fit was taken from, and `spread` places its values evenly across the tone.
+The renderer reads every one of them through a single `at` function.
 
 To hear all presets one after the other, run `mise run audition`.
 

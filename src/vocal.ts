@@ -1,4 +1,5 @@
 import { match } from 'ts-pattern'
+import { at, constant, type Curve } from './curve.ts'
 import {
   CEILING,
   RELEASE_FRAMES,
@@ -7,6 +8,23 @@ import {
   type Sound,
   type Touch
 } from './synth.ts'
+
+/**
+ * A run of harmonics above the profile's cutoff, from `from` upwards, whose
+ * weights are fixed instead of measured. `trim` scales the whole run.
+ */
+export interface UpperBand {
+  readonly from: number
+  readonly trim: number
+  readonly weights: readonly number[]
+}
+
+/** A run of upper harmonics starting at `from`; one weight for each harmonic. */
+export const band = (
+  from: number,
+  trim: number,
+  weights: readonly number[]
+): UpperBand => ({ from, trim, weights })
 
 /**
  * Everything the renderer needs that is particular to one fitted voice. A
@@ -24,21 +42,13 @@ export interface VocalProfile {
     readonly slopeHzPerSecond: number
   }
   /** Each lower harmonic's level over the tone, relative to the fundamental. */
-  readonly harmonicEnvelope: {
-    readonly fractions: readonly number[]
-    readonly gains: readonly (readonly number[])[]
-  }
+  readonly harmonics: readonly Curve[]
   /** Harmonics above this take their weight from `upper.bands` instead. */
   readonly cutoffHz: number
   /** Relative phase by harmonic number, 1-based; index 0 unused. */
   readonly phases: readonly number[]
   readonly upper: {
-    readonly bands: readonly {
-      readonly harmonics: readonly number[]
-      readonly weights: readonly number[]
-    }[]
-    /** Per-band trim by band index; a missing entry leaves the weight alone. */
-    readonly trims: readonly number[]
+    readonly bands: readonly UpperBand[]
     readonly gain: number
     /** The upper band's own fade in, on top of the tone's envelope. */
     readonly attackMs: number
@@ -50,12 +60,9 @@ export interface VocalProfile {
   /** Per-harmonic detune depth, so the harmonics do not stay perfectly locked. */
   readonly roughness: number
   /** Fine loudness shape over the tone, on top of `swell` and `hold`. */
-  readonly bodyEnvelope: readonly number[]
+  readonly body: Curve
   /** Cycle-to-cycle pitch wobble, as a fraction of the instantaneous fundamental. */
-  readonly cycle: {
-    readonly fractions: readonly number[]
-    readonly variation: readonly number[]
-  }
+  readonly cycle: Curve
 }
 
 const TOUCH_ATTACK_MS: Readonly<Record<Touch, number>> = {
@@ -64,55 +71,16 @@ const TOUCH_ATTACK_MS: Readonly<Record<Touch, number>> = {
   firm: 5
 }
 
-/** Value at `fraction` (0..1) over evenly spaced knots, clamped at the ends. */
-const interpolateEven = (
-  knots: readonly number[],
-  fraction: number
-): number => {
-  const first = knots[0]
-  if (first === undefined) return 0
-  const clamped = Math.min(1, Math.max(0, fraction))
-  const position = clamped * (knots.length - 1)
-  const lowerIndex = Math.floor(position)
-  const upperIndex = Math.min(knots.length - 1, lowerIndex + 1)
-  const lower = knots[lowerIndex] ?? first
-  const upper = knots[upperIndex] ?? lower
-  return lower + (upper - lower) * (position - lowerIndex)
-}
-
-/** Value at `fraction` over `values` at matching `fractions`, clamped at the ends. */
-const interpolateAt = (
-  fractions: readonly number[],
-  values: readonly number[],
-  fraction: number
-): number => {
-  const firstValue = values[0]
-  if (firstValue === undefined) return 0
-  const lastIndex = fractions.length - 1
-  const firstFraction = fractions[0] ?? 0
-  const lastFraction = fractions[lastIndex] ?? firstFraction
-  const lastValue = values[lastIndex] ?? firstValue
-  if (fraction <= firstFraction) return firstValue
-  if (fraction >= lastFraction) return lastValue
-  let upperIndex = 1
-  while ((fractions[upperIndex] ?? lastFraction) < fraction) upperIndex += 1
-  const lowerIndex = upperIndex - 1
-  const lowerFraction = fractions[lowerIndex] ?? firstFraction
-  const upperFraction = fractions[upperIndex] ?? lastFraction
-  const lowerValue = values[lowerIndex] ?? firstValue
-  const upperValue = values[upperIndex] ?? lastValue
-  const span = upperFraction - lowerFraction
-  const t = match(span)
-    .with(0, () => 0)
-    .otherwise(() => (fraction - lowerFraction) / span)
-  return lowerValue + (upperValue - lowerValue) * t
-}
+/** The envelope of a harmonic the profile has no measurement for. */
+const SILENT = constant(0)
+/** The upper band takes its level from its fixed weight, not from a curve. */
+const FIXED = constant(1)
 
 interface VocalPartial {
   readonly ratio: number
   readonly gain: number
-  /** Measured gain at each `harmonicEnvelope.fractions` knot; lower partials only. */
-  readonly envelopeGains: readonly number[]
+  /** This harmonic's level over the tone, relative to the fundamental. */
+  readonly envelope: Curve
   readonly isUpper: boolean
   phase: number
   decay: number
@@ -131,20 +99,20 @@ const partialsFor = (
     partials.push({
       ratio: n,
       gain: profile.lowerTrim,
-      envelopeGains: profile.harmonicEnvelope.gains[n - 1] ?? [],
+      envelope: profile.harmonics[n - 1] ?? SILENT,
       isUpper: false,
       phase: 0,
       decay: 1
     })
   }
-  for (const [bandIndex, band] of profile.upper.bands.entries()) {
-    const bandTrim = profile.upper.trims[bandIndex] ?? 1
-    for (const [index, n] of band.harmonics.entries()) {
+  for (const band of profile.upper.bands) {
+    for (const [index, weight] of band.weights.entries()) {
+      const n = band.from + index
       if (n * sound.frequency >= nyquist) break
       partials.push({
         ratio: n,
-        gain: profile.upper.gain * bandTrim * (band.weights[index] ?? 0),
-        envelopeGains: [],
+        gain: profile.upper.gain * band.trim * weight,
+        envelope: FIXED,
         isUpper: true,
         phase: 0,
         decay: 1
@@ -204,13 +172,9 @@ export const renderVocal = (
     const releaseProgress = Math.max(0, (i - releaseStart) / releaseFrames)
     const release = 0.5 * (1 + Math.cos(Math.PI * releaseProgress))
     const upperOnset = Math.min(1, i / upperAttackFrames)
-    const bodyEnvelope = interpolateEven(profile.bodyEnvelope, fraction)
+    const bodyEnvelope = at(profile.body, fraction)
     const contourSeconds = fraction * profile.durationS
-    const jitter = interpolateAt(
-      profile.cycle.fractions,
-      profile.cycle.variation,
-      fraction
-    )
+    const jitter = at(profile.cycle, fraction)
     const chirpHz =
       profile.chirp.startHz + profile.chirp.slopeHzPerSecond * contourSeconds
     const chirpBend = (chirpHz / profile.frequency) * (1 + jitter)
@@ -230,15 +194,7 @@ export const renderVocal = (
         SAMPLE_RATE
       const phaseFit = profile.phases[partial.ratio] ?? 0
       const totalPhase = partial.phase + phaseFit
-      const envelopeGain = match(partial.isUpper)
-        .with(true, () => 1)
-        .otherwise(() =>
-          interpolateAt(
-            profile.harmonicEnvelope.fractions,
-            partial.envelopeGains,
-            fraction
-          )
-        )
+      const envelopeGain = at(partial.envelope, fraction)
       const onset = match(partial.isUpper)
         .with(true, () => upperOnset)
         .otherwise(() => 1)
