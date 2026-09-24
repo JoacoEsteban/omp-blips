@@ -87,7 +87,7 @@ upper modes, and attack noise.
 | `glass`   | Bright upper modes with a long decay.                          |
 | `reed`    | Odd harmonics under a low resonance. Hollow, narrow, and dark. |
 | `brass`   | Every harmonic under three resonances. Generic rounded voice.  |
-| `vocal`   | Procedural rising voice with measured harmonic controls.       |
+| `vocal`   | Rounded low voice, fitted off a recording.                     |
 
 | Touch    | Character                                          |
 | -------- | -------------------------------------------------- |
@@ -150,7 +150,8 @@ provider failure has the same effect as a manual stop.
 ## Presets
 
 A preset is a complete set of values for the three voices. The file `src/presets.ts` holds the
-presets. The default preset has the name `default`.
+presets, except the `sans` preset, which lives next to nothing else because it depends on a voice
+profile: `src/preset-sans.ts`. The default preset has the name `default`.
 
 | Preset       | Sound                                                                               | Shows       |
 | ------------ | ----------------------------------------------------------------------------------- | ----------- |
@@ -185,7 +186,7 @@ The six presets after `quiet` each show one reading or one pitch with nothing in
 `sans` uses the dedicated `vocal` material for a low character voice. Each text blip lasts 140 milliseconds
 at 164.81 Hz. It rises across its first 15%, holds until its midpoint, then fades.
 The character interval remains 66 milliseconds, independent of the blip duration.
-One fixed colour value gives each character the same vocal shape.
+One character shape is used for every character.
 The reasoning voice uses the same renderer and envelope with a quieter, softer touch,
 at 123.47 Hz and half the character rate. The tool voice remains a short stone knock.
 
@@ -193,9 +194,9 @@ The `vocal` renderer uses measured harmonic phase and amplitude controls for har
 Its intrinsic contour adds rising pitch and cycle motion during each tone. All samples come from this
 runtime procedure. The preset does not load a sampled recording and does not require Python.
 
-Those controls are one value, not code. `src/vocal.ts` renders any `VocalProfile`, `src/vocal-profile.ts`
-holds the Sans fit as one such value, and `src/synth.ts` maps each vocal material to its profile.
-A second fitted voice is a second profile file and one more material name.
+Those controls are one value, not code. `src/vocal.ts` renders any `VocalProfile` and knows nothing
+about the voice itself, `src/vocal-profile.ts` holds the Sans fit, and `src/synth.ts` maps each vocal
+material to its profile. Another voice is another profile file and one more material name.
 
 A profile is built through the constructors in `src/curve.ts`, not written as parallel lists. A `Curve`
 carries its own knots: `measured` places its values at the cadence they were measured at, over the

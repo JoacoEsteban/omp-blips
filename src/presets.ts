@@ -1,4 +1,5 @@
 import type { ConfigPatch } from './config.ts'
+import { sansPreset } from './preset-sans.ts'
 import {
   BLUES,
   HIRAJOSHI,
@@ -576,64 +577,5 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // The dedicated procedural vocal renderer keeps the approved Sans timbre,
-  // rising pitch and cycle motion without a sampled asset.
-  sans: {
-    description:
-      'A rising vocal blip. Rounded low tones, one for each character.',
-    patch: {
-      // Keep the character cadence independent of the longer sample envelope.
-      minIntervalMs: 66,
-      voices: {
-        text: {
-          toneMs: 140,
-          decay: 5,
-          // A short rise, a held body, then a fade across the second half.
-          swell: 0.15,
-          hold: 0.5,
-          glide: 0,
-          volume: 0.3,
-          material: 'vocal',
-          color: { kind: 'fixed', at: 0.5 },
-          touch: 'normal',
-          // The approved Sans register and envelope stay fixed; the renderer
-          // supplies the intrinsic rise and cycle motion.
-          baseFrequency: 164.81,
-          reading: { kind: 'class', every: 1 },
-          pitch: { kind: 'drone' }
-        },
-        thinking: {
-          toneMs: 140,
-          decay: 5,
-          swell: 0.15,
-          hold: 0.5,
-          glide: 0,
-          volume: 0.24,
-          // A fourth below the text voice, at half the rate: the same mouth,
-          // talking to itself, quieter and with a softer attack.
-          baseFrequency: 123.47,
-          material: 'vocal',
-          color: { kind: 'fixed', at: 0.5 },
-          touch: 'soft',
-          reading: { kind: 'class', every: 2 },
-          pitch: { kind: 'drone' }
-        },
-        // Not speech: a dry knock under the voice, and the one struck sound in
-        // the preset.
-        tool: {
-          toneMs: 28,
-          decay: 1.5,
-          swell: 0,
-          hold: 0,
-          glide: 0,
-          volume: 0.2,
-          material: 'stone',
-          touch: 'firm',
-          baseFrequency: 146.83,
-          reading: { kind: 'class', every: 3 },
-          pitch: { kind: 'drone' }
-        }
-      }
-    }
-  }
+  sans: sansPreset
 }

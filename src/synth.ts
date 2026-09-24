@@ -23,8 +23,9 @@ export const RELEASE_FRAMES = Math.max(
 /**
  * What is resonating. The first four are struck objects: inharmonic partials
  * over a short impulse. `reed` and `brass` are generic sustained modal voices
- * with harmonic partials. A vocal material is a fitted voice profile played
- * by its own procedural renderer.
+ * with harmonic partials. A vocal material is a voice profile played by its
+ * own procedural renderer: `vocal` is the rounded low mouth fitted off a
+ * recording.
  */
 export type Material =
   'wood' | 'stone' | 'ceramic' | 'glass' | 'reed' | 'brass' | VocalMaterial
@@ -33,8 +34,8 @@ export type Material =
 export type VocalMaterial = 'vocal'
 
 /**
- * One profile for each vocal material. A new fitted voice is an entry here
- * and a data file; the renderer stays as it is.
+ * One profile for each vocal material. Another voice is an entry here and a
+ * data file; the renderer stays as it is.
  */
 const VOCAL_PROFILES: Readonly<Record<VocalMaterial, VocalProfile>> = {
   vocal: sansProfile
