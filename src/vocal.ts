@@ -5,8 +5,7 @@ import {
   SAMPLE_RATE,
   VOICE_GAIN,
   type Sound,
-  type Touch,
-  type VocalMaterial
+  type Touch
 } from './synth.ts'
 
 /**
@@ -166,7 +165,7 @@ const partialsFor = (
  * sit on top of the ordinary `swell`/`hold`/`decay` controls.
  */
 export const renderVocal = (
-  sound: Sound & { readonly material: VocalMaterial },
+  sound: Sound,
   profile: VocalProfile
 ): Float32Array => {
   const frames = Math.max(1, Math.round((SAMPLE_RATE * sound.toneMs) / 1000))

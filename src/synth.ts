@@ -329,22 +329,18 @@ const renderModalVoice = (sound: ModalSound): Float32Array => {
   return samples
 }
 
-/** Whether a sound has a vocal profile instead of a place on the modal path. */
-const isVocalSound = (
-  sound: Sound
-): sound is Sound & { readonly material: VocalMaterial } =>
-  Object.hasOwn(VOCAL_PROFILES, sound.material)
-
-const isModalSound = (sound: Sound): sound is ModalSound =>
-  !Object.hasOwn(VOCAL_PROFILES, sound.material)
-
-/** Dispatch a sound to the generic modal renderer or to its vocal profile. */
-const renderVoice = (sound: Sound): Float32Array => {
-  if (isVocalSound(sound))
-    return renderVocal(sound, VOCAL_PROFILES[sound.material])
-  if (isModalSound(sound)) return renderModalVoice(sound)
-  throw new Error(`Unreachable material: ${sound.material}`)
-}
+/**
+ * Dispatch a sound to its vocal profile or to the generic modal renderer.
+ * `.narrow()` drops the handled materials from the input, so the modal path
+ * keeps its narrower type without a second pattern.
+ */
+const renderVoice = (sound: Sound): Float32Array =>
+  match(sound)
+    .with({ material: 'vocal' }, (vocal) =>
+      renderVocal(vocal, VOCAL_PROFILES[vocal.material])
+    )
+    .narrow()
+    .otherwise(renderModalVoice)
 
 export const soundKey = (sound: Sound): string =>
   `${SOUND_VERSION}:${String(sound.frequency)}:${String(sound.toneMs)}:${String(sound.decay)}:${String(sound.swell)}:${String(sound.hold)}:${String(sound.glide)}:${String(sound.color)}:${sound.material}:${sound.touch}`
