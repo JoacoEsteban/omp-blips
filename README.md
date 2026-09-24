@@ -193,6 +193,10 @@ The `vocal` renderer uses measured harmonic phase and amplitude controls for har
 Its intrinsic contour adds rising pitch and cycle motion during each tone. All samples come from this
 runtime procedure. The preset does not load a sampled recording and does not require Python.
 
+Those controls are one value, not code. `src/vocal.ts` renders any `VocalProfile`, `src/vocal-profile.ts`
+holds the Sans fit as one such value, and `src/synth.ts` maps each vocal material to its profile.
+A second fitted voice is a second profile file and one more material name.
+
 To hear all presets one after the other, run `mise run audition`.
 
 To select a preset, write its name in a configuration file:

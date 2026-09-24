@@ -1,5 +1,6 @@
 import { match } from 'ts-pattern'
-import { renderVocal } from './vocal.ts'
+import { renderVocal, type VocalProfile } from './vocal.ts'
+import { sansProfile } from './vocal-profile.ts'
 
 export const SAMPLE_RATE = 44_100
 
@@ -22,10 +23,23 @@ export const RELEASE_FRAMES = Math.max(
 /**
  * What is resonating. The first four are struck objects: inharmonic partials
  * over a short impulse. `reed` and `brass` are generic sustained modal voices
- * with harmonic partials. `vocal` is a dedicated procedural voice renderer.
+ * with harmonic partials. A vocal material is a fitted voice profile played
+ * by its own procedural renderer.
  */
 export type Material =
-  'wood' | 'stone' | 'ceramic' | 'glass' | 'reed' | 'brass' | 'vocal'
+  'wood' | 'stone' | 'ceramic' | 'glass' | 'reed' | 'brass' | VocalMaterial
+
+/** Materials rendered from a `VocalProfile` instead of the modal path. */
+export type VocalMaterial = 'vocal'
+
+/**
+ * One profile for each vocal material. A new fitted voice is an entry here
+ * and a data file; the renderer stays as it is.
+ */
+const VOCAL_PROFILES: Readonly<Record<VocalMaterial, VocalProfile>> = {
+  vocal: sansProfile
+}
+
 export type Touch = 'soft' | 'normal' | 'firm'
 
 export interface Sound {
@@ -153,7 +167,7 @@ const voiced = (
 
 const MATERIAL_MODES: Readonly<
   Record<
-    Exclude<Material, 'reed' | 'brass' | 'vocal'>,
+    Exclude<Material, 'reed' | 'brass' | VocalMaterial>,
     readonly ResonanceMode[]
   >
 > = {
@@ -182,9 +196,9 @@ const MATERIAL_MODES: Readonly<
   ]
 }
 
-/** A sound rendered by the generic modal path; the dedicated `vocal` renderer never reaches it. */
+/** A sound rendered by the generic modal path; a vocal material never reaches it. */
 export type ModalSound = Sound & {
-  readonly material: Exclude<Material, 'vocal'>
+  readonly material: Exclude<Material, VocalMaterial>
 }
 
 /** The partials of one generic modal sound, struck or sustained. */
@@ -315,17 +329,19 @@ const renderModalVoice = (sound: ModalSound): Float32Array => {
   return samples
 }
 
-/** Whether a sound uses the dedicated `vocal` renderer instead of the generic modal path. */
+/** Whether a sound has a vocal profile instead of a place on the modal path. */
 const isVocalSound = (
   sound: Sound
-): sound is Sound & { readonly material: 'vocal' } => sound.material === 'vocal'
+): sound is Sound & { readonly material: VocalMaterial } =>
+  Object.hasOwn(VOCAL_PROFILES, sound.material)
 
 const isModalSound = (sound: Sound): sound is ModalSound =>
-  sound.material !== 'vocal'
+  !Object.hasOwn(VOCAL_PROFILES, sound.material)
 
-/** Dispatch a sound to the generic modal or dedicated vocal renderer. */
+/** Dispatch a sound to the generic modal renderer or to its vocal profile. */
 const renderVoice = (sound: Sound): Float32Array => {
-  if (isVocalSound(sound)) return renderVocal(sound)
+  if (isVocalSound(sound))
+    return renderVocal(sound, VOCAL_PROFILES[sound.material])
   if (isModalSound(sound)) return renderModalVoice(sound)
   throw new Error(`Unreachable material: ${sound.material}`)
 }

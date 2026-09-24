@@ -1,19 +1,25 @@
 /**
- * Measured controls for the dedicated `vocal` renderer, fitted from the
- * approved Sans audition candidate against `voice_sans.mp3`. Every array here
- * is a compact, resampled summary of that fit, not a copy of the recording:
+ * One measured control set for the `vocal` renderer, fitted from the approved
+ * Sans audition candidate against `voice_sans.mp3`. Every array here is a
+ * compact, resampled summary of that fit, not a copy of the recording:
  * `voice()` still renders every sample at request time in `vocal.ts`.
+ *
+ * Nothing here is imported directly. The file exports a single
+ * `VocalProfile`, so a second fitted voice is a second data file and no
+ * renderer change.
  */
 
+import type { VocalProfile } from './vocal.ts'
+
 /** The base frequency the whole profile was measured at. */
-export const PROFILE_FREQUENCY = 164.81
+const PROFILE_FREQUENCY = 164.81
 
 /**
  * The fundamental rises across the tone instead of holding steady. Fitted as
  * a line through six windows of the approved candidate; endpoints extrapolate
  * from interior estimates.
  */
-export const PITCH_CHIRP = {
+const PITCH_CHIRP = {
   startHz: 158.0679,
   slopeHzPerSecond: 130.3714
 }
@@ -31,11 +37,11 @@ export const PITCH_CHIRP = {
  * `color` no longer articulates a formant sweep: the fit is a single
  * recorded vowel, not a family of vowels, so there is nothing to sweep to.
  */
-export const HARMONIC_ENVELOPE_FRACTIONS: readonly number[] = [
+const HARMONIC_ENVELOPE_FRACTIONS: readonly number[] = [
   0.0571, 0.1, 0.1429, 0.1857, 0.2286, 0.2714, 0.3143, 0.3571, 0.4, 0.4429,
   0.4857, 0.5286, 0.5714, 0.6143, 0.6571, 0.7, 0.7429, 0.7857, 0.8286
 ]
-export const HARMONIC_ENVELOPE_GAINS: readonly (readonly number[])[] = [
+const HARMONIC_ENVELOPE_GAINS: readonly (readonly number[])[] = [
   [
     1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
     1.0, 1.0, 1.0, 1.0
@@ -174,10 +180,7 @@ export const HARMONIC_ENVELOPE_GAINS: readonly (readonly number[])[] = [
 ]
 
 /** Harmonics above this settle into the explicit `UPPER_BANDS` weights instead. */
-export const HARMONIC_CUTOFF_HZ = 5200
-
-/** Highest harmonic number the profile has a measured weight for. */
-export const HARMONIC_LIMIT = 60
+const HARMONIC_CUTOFF_HZ = 5200
 
 /**
  * Relative phase of each harmonic (index = harmonic number, 1-based; index 0
@@ -185,7 +188,7 @@ export const HARMONIC_LIMIT = 60
  * already removed. The renderer adds that multiple back at request time, so
  * the harmonics lock to whatever the instantaneous fundamental is doing.
  */
-export const HARMONIC_PHASES: readonly number[] = [
+const HARMONIC_PHASES: readonly number[] = [
   0, 0, 0.1727, -1.3818, -0.741, 0.5485, 0.2786, 0.6136, 0.871, -0.4484, 0.4159,
   0.0518, -0.7452, -0.7026, -0.9324, -0.7706, -0.3744, -1.6118, 1.8389, 1.5636,
   1.0136, 1.4904, -0.74, 0.1728, -1.6467, 1.8802, -0.676, -0.668, -0.6299,
@@ -200,7 +203,7 @@ export const HARMONIC_PHASES: readonly number[] = [
  * instead of the measured envelope, so the brighter, deliberately
  * emphasized upper band keeps its approved balance.
  */
-export const UPPER_BANDS: readonly {
+const UPPER_BANDS: readonly {
   readonly harmonics: readonly number[]
   readonly weights: readonly number[]
 }[] = [
@@ -221,9 +224,8 @@ export const UPPER_BANDS: readonly {
     ]
   }
 ]
-/** The upper band's own fade in and out, on top of the tone's envelope. */
-export const UPPER_ATTACK_MS = 8
-export const UPPER_RELEASE_MS = 12
+/** The upper band's own fade in, on top of the tone's envelope. */
+const UPPER_ATTACK_MS = 8
 
 /**
  * A reference-to-recording loudness ratio, resampled to knots across the
@@ -231,7 +233,7 @@ export const UPPER_RELEASE_MS = 12
  * the fine rise-hold-fade shape the simple three-fraction envelope cannot
  * express on its own.
  */
-export const BODY_ENVELOPE: readonly number[] = [
+const BODY_ENVELOPE: readonly number[] = [
   0.8573, 0.9411, 0.9215, 0.8339, 0.7929, 0.804, 0.8307, 0.8691, 0.8851, 0.9065,
   0.967, 1.025, 1.081, 1.1813, 1.3082, 1.3952, 1.4675, 1.575, 1.6378, 1.5226,
   1.3048, 1.3722, 1.8334, 2
@@ -241,7 +243,7 @@ export const BODY_ENVELOPE: readonly number[] = [
  * Small, measured cycle-to-cycle pitch wobble, as a fraction of the
  * instantaneous fundamental at each knot (fraction of the tone).
  */
-export const CYCLE_FRACTIONS: readonly number[] = [
+const CYCLE_FRACTIONS: readonly number[] = [
   18 / 115,
   24 / 115,
   30 / 115,
@@ -257,7 +259,34 @@ export const CYCLE_FRACTIONS: readonly number[] = [
   90 / 115,
   96 / 115
 ]
-export const CYCLE_VARIATION: readonly number[] = [
+const CYCLE_VARIATION: readonly number[] = [
   -0.0036, -0.0011, -0.002, -0.0012, 0.0012, -0.0011, -0.0047, -0.0035, -0.0049,
   -0.0004, 0.0057, 0.0083, -0.0018, -0.0096
 ]
+
+export const sansProfile: VocalProfile = {
+  frequency: PROFILE_FREQUENCY,
+  // The profile's own tone length; the chirp and cycle curves are fractions of it.
+  durationS: 0.115,
+  chirp: PITCH_CHIRP,
+  harmonicEnvelope: {
+    fractions: HARMONIC_ENVELOPE_FRACTIONS,
+    gains: HARMONIC_ENVELOPE_GAINS
+  },
+  cutoffHz: HARMONIC_CUTOFF_HZ,
+  phases: HARMONIC_PHASES,
+  upper: {
+    bands: UPPER_BANDS,
+    // Band trims by band index; a band without one keeps its measured weight.
+    trims: [1, 0.77],
+    gain: 0.4,
+    attackMs: UPPER_ATTACK_MS
+  },
+  lowerTrim: 0.9,
+  // Slower than the generic modal materials: this candidate rings longer.
+  modalDecay: 0.66,
+  // Per-harmonic detune, so the harmonics do not stay perfectly locked.
+  roughness: 0.0015,
+  bodyEnvelope: BODY_ENVELOPE,
+  cycle: { fractions: CYCLE_FRACTIONS, variation: CYCLE_VARIATION }
+}

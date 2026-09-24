@@ -5,26 +5,60 @@ import {
   SAMPLE_RATE,
   VOICE_GAIN,
   type Sound,
-  type Touch
+  type Touch,
+  type VocalMaterial
 } from './synth.ts'
-import {
-  BODY_ENVELOPE,
-  CYCLE_FRACTIONS,
-  CYCLE_VARIATION,
-  HARMONIC_CUTOFF_HZ,
-  HARMONIC_ENVELOPE_FRACTIONS,
-  HARMONIC_ENVELOPE_GAINS,
-  HARMONIC_PHASES,
-  PITCH_CHIRP,
-  PROFILE_FREQUENCY,
-  UPPER_ATTACK_MS,
-  UPPER_BANDS
-} from './vocal-profile.ts'
 
-/** The profile's own tone length; the chirp and cycle curves are fractions of it. */
-const PROFILE_DURATION_S = 0.115
-/** Slower than the generic modal materials: the approved candidate rings longer. */
-const MODAL_DECAY = 0.66
+/**
+ * Everything the renderer needs that is particular to one fitted voice. A
+ * profile is data: `vocal-profile.ts` holds the Sans fit, and another voice
+ * is another value of this shape, not another renderer.
+ */
+export interface VocalProfile {
+  /** The base frequency the whole profile was measured at. */
+  readonly frequency: number
+  /** The profile's own tone length; the chirp and cycle curves are fractions of it. */
+  readonly durationS: number
+  /** The fundamental's rise across the tone, as a line in real time. */
+  readonly chirp: {
+    readonly startHz: number
+    readonly slopeHzPerSecond: number
+  }
+  /** Each lower harmonic's level over the tone, relative to the fundamental. */
+  readonly harmonicEnvelope: {
+    readonly fractions: readonly number[]
+    readonly gains: readonly (readonly number[])[]
+  }
+  /** Harmonics above this take their weight from `upper.bands` instead. */
+  readonly cutoffHz: number
+  /** Relative phase by harmonic number, 1-based; index 0 unused. */
+  readonly phases: readonly number[]
+  readonly upper: {
+    readonly bands: readonly {
+      readonly harmonics: readonly number[]
+      readonly weights: readonly number[]
+    }[]
+    /** Per-band trim by band index; a missing entry leaves the weight alone. */
+    readonly trims: readonly number[]
+    readonly gain: number
+    /** The upper band's own fade in, on top of the tone's envelope. */
+    readonly attackMs: number
+  }
+  /** Flat trim on every harmonic under the cutoff. */
+  readonly lowerTrim: number
+  /** Base modal decay rate, before the voice's own `decay` multiplier. */
+  readonly modalDecay: number
+  /** Per-harmonic detune depth, so the harmonics do not stay perfectly locked. */
+  readonly roughness: number
+  /** Fine loudness shape over the tone, on top of `swell` and `hold`. */
+  readonly bodyEnvelope: readonly number[]
+  /** Cycle-to-cycle pitch wobble, as a fraction of the instantaneous fundamental. */
+  readonly cycle: {
+    readonly fractions: readonly number[]
+    readonly variation: readonly number[]
+  }
+}
+
 const TOUCH_ATTACK_MS: Readonly<Record<Touch, number>> = {
   soft: 14,
   normal: 8,
@@ -78,7 +112,7 @@ const interpolateAt = (
 interface VocalPartial {
   readonly ratio: number
   readonly gain: number
-  /** Measured gain at each `HARMONIC_ENVELOPE_FRACTIONS` knot; lower partials only. */
+  /** Measured gain at each `harmonicEnvelope.fractions` knot; lower partials only. */
   readonly envelopeGains: readonly number[]
   readonly isUpper: boolean
   phase: number
@@ -86,31 +120,31 @@ interface VocalPartial {
 }
 
 /** The fixed harmonic weights, independent of the tone length. */
-const partialsFor = (sound: Sound): readonly VocalPartial[] => {
+const partialsFor = (
+  sound: Sound,
+  profile: VocalProfile
+): readonly VocalPartial[] => {
   const nyquist = SAMPLE_RATE / 2
   const partials: VocalPartial[] = []
-  const cutoffHarmonic = Math.floor(HARMONIC_CUTOFF_HZ / PROFILE_FREQUENCY)
-  const lowerTrim = 0.9
+  const cutoffHarmonic = Math.floor(profile.cutoffHz / profile.frequency)
   for (let n = 1; n <= cutoffHarmonic; n += 1) {
     if (n * sound.frequency >= nyquist) break
     partials.push({
       ratio: n,
-      gain: lowerTrim,
-      envelopeGains: HARMONIC_ENVELOPE_GAINS[n - 1] ?? [],
+      gain: profile.lowerTrim,
+      envelopeGains: profile.harmonicEnvelope.gains[n - 1] ?? [],
       isUpper: false,
       phase: 0,
       decay: 1
     })
   }
-  for (const [bandIndex, band] of UPPER_BANDS.entries()) {
-    const bandTrim = match(bandIndex)
-      .with(1, () => 0.77)
-      .otherwise(() => 1)
+  for (const [bandIndex, band] of profile.upper.bands.entries()) {
+    const bandTrim = profile.upper.trims[bandIndex] ?? 1
     for (const [index, n] of band.harmonics.entries()) {
       if (n * sound.frequency >= nyquist) break
       partials.push({
         ratio: n,
-        gain: 0.4 * bandTrim * (band.weights[index] ?? 0),
+        gain: profile.upper.gain * bandTrim * (band.weights[index] ?? 0),
         envelopeGains: [],
         isUpper: true,
         phase: 0,
@@ -122,18 +156,18 @@ const partialsFor = (sound: Sound): readonly VocalPartial[] => {
 }
 
 /**
- * The dedicated procedural renderer for the `vocal` material. Unlike the
- * generic modal path, its harmonic source is a chirp fitted to the approved
- * Sans audition: the fundamental rises across the tone, each harmonic keeps
- * its own measured phase and (below `HARMONIC_CUTOFF_HZ`) its own measured
- * envelope, read directly off the recording's spectral shape over time
- * rather than approximated from a handful of formants; a brighter set of
- * upper harmonics keeps its own fixed weights. A measured body envelope and
- * small cycle-to-cycle pitch wobble sit on top of the ordinary
- * `swell`/`hold`/`decay` controls.
+ * The dedicated procedural renderer for a vocal material. Unlike the generic
+ * modal path, its harmonic source is a chirp taken from `profile`: the
+ * fundamental rises across the tone, each harmonic keeps its own measured
+ * phase and (below the profile's cutoff) its own measured envelope, read off
+ * a recording's spectral shape over time rather than approximated from a
+ * handful of formants; a brighter set of upper harmonics keeps its own fixed
+ * weights. The profile's body envelope and small cycle-to-cycle pitch wobble
+ * sit on top of the ordinary `swell`/`hold`/`decay` controls.
  */
 export const renderVocal = (
-  sound: Sound & { readonly material: 'vocal' }
+  sound: Sound & { readonly material: VocalMaterial },
+  profile: VocalProfile
 ): Float32Array => {
   const frames = Math.max(1, Math.round((SAMPLE_RATE * sound.toneMs) / 1000))
   const samples = new Float32Array(frames)
@@ -152,7 +186,7 @@ export const renderVocal = (
   )
   const upperAttackFrames = Math.max(
     1,
-    Math.round((SAMPLE_RATE * UPPER_ATTACK_MS) / 1000)
+    Math.round((SAMPLE_RATE * profile.upper.attackMs) / 1000)
   )
   const riseFrames = Math.max(
     attackFrames,
@@ -162,7 +196,7 @@ export const renderVocal = (
   const glideStep = (1 / glideFrom) ** (1 / last)
   let glideBend = glideFrom
 
-  const partials = partialsFor(sound)
+  const partials = partialsFor(sound, profile)
   let peak = 0
 
   for (let i = 1; i < last; i += 1) {
@@ -171,16 +205,21 @@ export const renderVocal = (
     const releaseProgress = Math.max(0, (i - releaseStart) / releaseFrames)
     const release = 0.5 * (1 + Math.cos(Math.PI * releaseProgress))
     const upperOnset = Math.min(1, i / upperAttackFrames)
-    const bodyEnvelope = interpolateEven(BODY_ENVELOPE, fraction)
-    const contourSeconds = fraction * PROFILE_DURATION_S
-    const jitter = interpolateAt(CYCLE_FRACTIONS, CYCLE_VARIATION, fraction)
+    const bodyEnvelope = interpolateEven(profile.bodyEnvelope, fraction)
+    const contourSeconds = fraction * profile.durationS
+    const jitter = interpolateAt(
+      profile.cycle.fractions,
+      profile.cycle.variation,
+      fraction
+    )
     const chirpHz =
-      PITCH_CHIRP.startHz + PITCH_CHIRP.slopeHzPerSecond * contourSeconds
-    const chirpBend = (chirpHz / PROFILE_FREQUENCY) * (1 + jitter)
+      profile.chirp.startHz + profile.chirp.slopeHzPerSecond * contourSeconds
+    const chirpBend = (chirpHz / profile.frequency) * (1 + jitter)
 
     let resonances = 0
     for (const partial of partials) {
-      const roughness = 1 + 0.0015 * Math.sin(partial.ratio * 12.9898 + 78.233)
+      const roughness =
+        1 + profile.roughness * Math.sin(partial.ratio * 12.9898 + 78.233)
       const phaseStep =
         (2 *
           Math.PI *
@@ -190,13 +229,13 @@ export const renderVocal = (
           roughness *
           glideBend) /
         SAMPLE_RATE
-      const phaseFit = HARMONIC_PHASES[partial.ratio] ?? 0
+      const phaseFit = profile.phases[partial.ratio] ?? 0
       const totalPhase = partial.phase + phaseFit
       const envelopeGain = match(partial.isUpper)
         .with(true, () => 1)
         .otherwise(() =>
           interpolateAt(
-            HARMONIC_ENVELOPE_FRACTIONS,
+            profile.harmonicEnvelope.fractions,
             partial.envelopeGains,
             fraction
           )
@@ -216,8 +255,8 @@ export const renderVocal = (
         // decay shape; only the explicit upper-band harmonics (uncovered by
         // that measurement) still need a synthetic per-harmonic decay rate.
         const decayRate = match(partial.isUpper)
-          .with(true, () => MODAL_DECAY * (0.5 + partial.ratio * 0.08))
-          .otherwise(() => MODAL_DECAY * 0.5)
+          .with(true, () => profile.modalDecay * (0.5 + partial.ratio * 0.08))
+          .otherwise(() => profile.modalDecay * 0.5)
         partial.decay *= Math.exp(
           -(decayRate * sound.decay) / Math.max(1, frames - 1)
         )
