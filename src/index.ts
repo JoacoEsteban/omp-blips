@@ -35,6 +35,7 @@ import {
   blipsFrom,
   type Chunk,
   chunkOf,
+  gridFrom,
   isInterrupt,
   stoppedEarly
 } from './stream.ts'
@@ -117,7 +118,7 @@ export default function blips(pi: ExtensionAPI): void {
   const session = steps.pipe(
     map((step) => step.session),
     startWith(initialSession),
-    shareReplay({ bufferSize: 1, refCount: false })
+    shareReplay({ bufferSize: 1, refCount: true })
   )
 
   const notices = steps.pipe(
@@ -137,20 +138,26 @@ export default function blips(pi: ExtensionAPI): void {
 
   /**
    * An interrupted stream leaves blips ringing for text that is no longer
-   * coming, and a half-spent budget for the next message. The end of a message
-   * clears the budget either way.
+   * coming, and an unread tail for the next message. The end of a message
+   * clears the cursors either way.
    */
   const silenced = merge(interrupted, io.ended.pipe(filter(stoppedEarly)))
   const restart = merge(interrupted, io.ended)
+
+  /** One grid for the three voices, so they lock to each other. */
+  const ticks = gridFrom(
+    session.pipe(map((current) => current.settings.config.tickHz))
+  )
 
   const commands = merge(
     blipsFrom(
       chunks,
       (kind) => session.pipe(map((current) => voicingOf(current, kind))),
-      restart
+      restart,
+      ticks
     ).pipe(map(({ tone }) => play(tone))),
     silenced.pipe(map(() => flush()))
-  )
+  ).pipe(takeUntil(io.shutdown))
 
   const audio = playback(session.pipe(map(deviceOf)), commands).pipe(
     // A dead device must not take the session down with it.

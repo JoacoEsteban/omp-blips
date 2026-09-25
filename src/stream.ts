@@ -3,21 +3,20 @@ import type {
   MessageUpdateEvent
 } from '@oh-my-pi/pi-coding-agent'
 import {
-  concatMap,
-  EMPTY,
+  distinctUntilChanged,
   filter,
-  from,
   groupBy,
+  ignoreElements,
+  interval,
   map,
+  merge,
   mergeMap,
-  type MonoTypeOperatorFunction,
   type Observable,
   type OperatorFunction,
   scan,
+  share,
   startWith,
   switchMap,
-  throttle,
-  timer,
   withLatestFrom
 } from 'rxjs'
 import { match, P } from 'ts-pattern'
@@ -25,6 +24,7 @@ import type { StreamKind, VoiceConfig } from './config.ts'
 import { colorOf } from './color.ts'
 import { frequencyOf } from './pitch.ts'
 import { type Reading, type ReadingConfig, readingOf } from './reading.ts'
+import { TICK_MS } from './players/mixer.ts'
 import type { Tone } from './players/types.ts'
 
 /** A slice of one stream kind, exactly as the agent delivered it. */
@@ -36,8 +36,6 @@ export interface Chunk {
 /** What one kind sounds like right now. A missing voice is a silenced one. */
 export interface Voicing {
   readonly voice: VoiceConfig | undefined
-  /** Floor between two blips of this kind. */
-  readonly minIntervalMs: number
 }
 
 /** A character that earned a tone. */
@@ -83,32 +81,119 @@ export const stoppedEarly = (message: MessageEndEvent['message']): boolean =>
     )
     .otherwise(() => false)
 
-/** A blip carrying the floor that applies to it, so pacing needs no ambient state. */
-interface Paced extends Blip {
-  readonly paceMs: number
+/** The effective period shared by playback and audition scheduling. */
+export const gridPeriodMs = (hz: number): number =>
+  Math.max(TICK_MS, Math.round(1000 / hz / TICK_MS) * TICK_MS)
+
+/**
+ * The grid every voice sounds on, numbered so a voice can take every `n`th
+ * tick. One timer, shared: three timers at three rates would drift apart and
+ * the voices with them.
+ *
+ * The period is snapped to a whole number of mixer ticks. The mixer starts a
+ * tone at the head of the block it is writing, so a period off its own grid
+ * would land tones a tick early or late at random. That wobble is inaudible on
+ * a screen and very audible in a beat.
+ */
+export const gridFrom = (tickHz: Observable<number>): Observable<number> =>
+  tickHz.pipe(
+    map(gridPeriodMs),
+    distinctUntilChanged(),
+    switchMap((periodMs) => interval(periodMs)),
+    share()
+  )
+
+/**
+ * Ticks the cursor is given to close whatever gap it finds. The stride widens
+ * with the backlog so a burst is crossed in about this many ticks; the grid
+ * itself never moves, so catching up costs text resolution and not tempo.
+ */
+const CATCHUP_TICKS = 8
+
+const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+
+/**
+ * Graphemes, not code units: an emoji or an accented letter is one thing to
+ * read and so one thing to sound. A cluster split across two deltas counts as
+ * two, which costs one extra blip at a boundary and nothing else.
+ */
+const countGraphemes = (text: string): number => {
+  const walk = segmenter.segment(text)[Symbol.iterator]()
+  let count = 0
+  while (!walk.next().done) count += 1
+  return count
+}
+
+/** The last character in a span that the reading gave an index to. */
+interface Sounded {
+  readonly char: string
+  readonly index: number
+}
+
+/** How far a span took the cursor, and what it left to sound. */
+interface Walked {
+  readonly reading: Reading
+  /** Code units consumed, so the caller can drop the prefix it spent. */
+  readonly end: number
+  readonly taken: number
+  readonly sounded: Sounded | undefined
 }
 
 /**
- * What the last character produced, and the reading that continues after it.
- * `source` is the config the cursor came from, so a voice that changes its
- * reading starts a new phrase instead of continuing an old one in a new shape.
+ * Read `units` graphemes and keep the last index they produced. A span rather
+ * than a point, so a stride that lands on a space still sounds what it crossed
+ * instead of leaving a hole in the grid. A span of pure whitespace sounds
+ * nothing, which is the rest the text asked for.
  */
-interface Count {
-  readonly blip: Paced | undefined
-  readonly cursor: Reading | undefined
+const walk = (reading: Reading, text: string, units: number): Walked => {
+  let cursor = reading
+  let end = 0
+  let taken = 0
+  let sounded: Sounded | undefined
+  for (const { segment } of segmenter.segment(text)) {
+    if (taken >= units) break
+    const [next, index] = cursor.read(segment)
+    cursor = next
+    end += segment.length
+    taken += 1
+    if (index !== undefined) sounded = { char: segment, index }
+  }
+  return { reading: cursor, end, taken, sounded }
+}
+
+/**
+ * Where one voice has got to. `pending` is the text the cursor has not reached
+ * and `backlog` is its length in graphemes, kept alongside so a tick costs the
+ * stride and not the whole buffer. `source` is the config the reading came
+ * from, so a voice that changes its reading starts a new phrase instead of
+ * continuing an old one in a new shape.
+ */
+interface Cursor {
+  readonly pending: string
+  readonly backlog: number
+  /** Never shrink a catch-up stride until the buffer is empty. */
+  readonly catchupStride: number
+  readonly reading: Reading | undefined
   readonly source: ReadingConfig | undefined
+  readonly blip: Blip | undefined
 }
 
-const SILENT: Count = {
-  blip: undefined,
-  cursor: undefined,
-  source: undefined
+const START: Cursor = {
+  pending: '',
+  backlog: 0,
+  catchupStride: 0,
+  reading: undefined,
+  source: undefined,
+  blip: undefined
 }
 
-const cursorOf = ({ cursor, source }: Count, reading: ReadingConfig): Reading =>
-  match({ cursor, stale: source !== reading })
-    .with({ cursor: P.nonNullable, stale: false }, ({ cursor: live }) => live)
-    .otherwise(() => readingOf(reading))
+const readingFor = (
+  { reading, source }: Cursor,
+  config: ReadingConfig
+): Reading =>
+  match({ reading, stale: source !== config })
+    .with({ reading: P.nonNullable, stale: false }, ({ reading: live }) => live)
+    .otherwise(() => readingOf(config))
 
 const toneOf = (voice: VoiceConfig, index: number): Tone => ({
   frequency: frequencyOf(index, voice),
@@ -125,60 +210,81 @@ const toneOf = (voice: VoiceConfig, index: number): Tone => ({
   volume: voice.volume
 })
 
-/**
- * One character against one voice. The reading decides both what sounds and how
- * often: it returns an index for a character that earns a blip, and nothing for
- * a character that does not.
- */
-const strike = (
-  count: Count,
-  char: string,
-  { voice, minIntervalMs }: Voicing
-): Count =>
-  match(voice)
-    .with(P.nullish, () => ({ ...count, blip: undefined }))
-    .otherwise((voiced) => {
-      const [cursor, index] = cursorOf(count, voiced.reading).read(char)
-      const carried = { cursor, source: voiced.reading }
-      return match(index)
-        .with(P.nullish, () => ({ ...carried, blip: undefined }))
-        .otherwise((sounded) => ({
-          ...carried,
-          blip: {
-            char,
-            tone: toneOf(voiced, sounded),
-            paceMs: minIntervalMs
-          }
-        }))
-    })
-
-/**
- * Drop values that arrive inside the interval their predecessor asked for. A
- * fast stream gets thinned out instead of stacked, and a zero interval lets
- * everything through.
- */
-const paceBy = <T>(
-  intervalMs: (value: T) => number
-): MonoTypeOperatorFunction<T> =>
-  throttle(
-    (value) =>
-      match(intervalMs(value))
-        .with(P.number.lte(0), () => EMPTY)
-        .otherwise((ms) => timer(ms)),
-    { leading: true, trailing: false }
+/** One sounding: walk the stride, or more of it when the text got ahead. */
+const drain = (cursor: Cursor, voice: VoiceConfig): Cursor => {
+  const catchupStride = Math.max(
+    cursor.catchupStride,
+    Math.ceil(cursor.backlog / CATCHUP_TICKS)
   )
+  const walked = walk(
+    readingFor(cursor, voice.reading),
+    cursor.pending,
+    Math.max(voice.stride, catchupStride)
+  )
+  return {
+    pending: cursor.pending.slice(walked.end),
+    backlog: cursor.backlog - walked.taken,
+    catchupStride: match(walked.end === cursor.pending.length)
+      .with(true, () => 0)
+      .with(false, () => catchupStride)
+      .exhaustive(),
+    reading: walked.reading,
+    source: voice.reading,
+    blip: match(walked.sounded)
+      .with(P.nullish, () => undefined)
+      .otherwise(({ char, index }) => ({ char, tone: toneOf(voice, index) }))
+  }
+}
 
-/** Characters of one kind become paced blips. */
+/** Text arriving and the grid ticking are the only two things that happen. */
+type Pulse =
+  | { readonly type: 'text'; readonly text: string }
+  | { readonly type: 'tick'; readonly at: number }
+
+/**
+ * A delta only moves the far end of the buffer; the grid is what sounds. A
+ * silenced voice keeps no buffer, so turning it back on starts from now
+ * instead of dumping everything it missed.
+ */
+const step = (cursor: Cursor, pulse: Pulse, { voice }: Voicing): Cursor =>
+  match(voice)
+    .with(P.nullish, () => START)
+    .otherwise((voiced) =>
+      match(pulse)
+        .with({ type: 'text', text: P.select() }, (text) => ({
+          ...cursor,
+          pending: cursor.pending + text,
+          backlog: cursor.backlog + countGraphemes(text),
+          blip: undefined
+        }))
+        .with({ type: 'tick', at: P.number.select() }, (at) =>
+          match(at % voiced.divisor === 0 && cursor.backlog > 0)
+            .with(false, () => ({ ...cursor, blip: undefined }))
+            .with(true, () => drain(cursor, voiced))
+            .exhaustive()
+        )
+        .exhaustive()
+    )
+
+/**
+ * Deltas of one kind become blips on the shared grid. Arrival fills a buffer
+ * and the grid empties it, so the rate you hear is the preset's and the notes
+ * you hear are the text's.
+ */
 export const tonesFrom =
-  (voicing: Observable<Voicing>): OperatorFunction<string, Blip> =>
-  (characters) =>
-    characters.pipe(
+  (
+    voicing: Observable<Voicing>,
+    ticks: Observable<number>
+  ): OperatorFunction<string, Blip> =>
+  (deltas) =>
+    merge(
+      deltas.pipe(map((text): Pulse => ({ type: 'text', text }))),
+      ticks.pipe(map((at): Pulse => ({ type: 'tick', at })))
+    ).pipe(
       withLatestFrom(voicing),
-      scan((count, [char, current]) => strike(count, char, current), SILENT),
-      map((count) => count.blip),
-      filter((blip): blip is Paced => blip !== undefined),
-      paceBy((blip) => blip.paceMs),
-      map(({ char, tone }) => ({ char, tone }))
+      scan((cursor, [pulse, current]) => step(cursor, pulse, current), START),
+      map((cursor) => cursor.blip),
+      filter((blip): blip is Blip => blip !== undefined)
     )
 
 /** A blip and the stream kind that produced it. */
@@ -187,28 +293,34 @@ export interface Voiced extends Blip {
 }
 
 /**
- * Chunks become blips, one independent count per kind: the three voices are
- * meant to layer, so a hot `thinking` stream must not spend the budget that
- * `text` and `tool` blips need.
+ * Chunks become blips, one independent cursor per kind: the three voices are
+ * meant to layer, so a hot `thinking` stream must not drag `text` and `tool`
+ * along with it. They share one `ticks` grid, which is what keeps them locked
+ * to each other instead of slowly drifting apart.
  *
- * Every `restart` begins fresh counts. A finished or interrupted message must
- * not leave a half-spent budget behind for the next one.
+ * Every `restart` begins fresh cursors. A finished or interrupted message must
+ * not leave its unread tail behind for the next one.
  */
 export const blipsFrom = (
   chunks: Observable<Chunk>,
   voicing: (kind: StreamKind) => Observable<Voicing>,
-  restart: Observable<unknown>
+  restart: Observable<unknown>,
+  ticks: Observable<number>
 ): Observable<Voiced> =>
-  restart.pipe(
-    startWith(undefined),
-    switchMap(() =>
-      chunks.pipe(
-        groupBy((chunk) => chunk.kind),
-        mergeMap((kind) =>
-          kind.pipe(
-            concatMap((chunk) => from(chunk.delta)),
-            tonesFrom(voicing(kind.key)),
-            map((blip) => ({ ...blip, kind: kind.key }))
+  merge(
+    // Keep the clock subscribed while a restart replaces all of its cursors.
+    ticks.pipe(ignoreElements()),
+    restart.pipe(
+      startWith(undefined),
+      switchMap(() =>
+        chunks.pipe(
+          groupBy((chunk) => chunk.kind),
+          mergeMap((kind) =>
+            kind.pipe(
+              map((chunk) => chunk.delta),
+              tonesFrom(voicing(kind.key), ticks),
+              map((blip) => ({ ...blip, kind: kind.key }))
+            )
           )
         )
       )

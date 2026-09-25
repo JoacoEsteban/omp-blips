@@ -13,23 +13,13 @@ import {
 import { type PresetName, PRESET_NAMES, presets } from './presets.ts'
 
 const readingSchema = z.discriminatedUnion('kind', [
-  z.strictObject({
-    kind: z.literal('alphabet'),
-    every: z.number().int().positive()
-  }),
+  z.strictObject({ kind: z.literal('alphabet') }),
   z.strictObject({
     kind: z.literal('codepoint'),
-    span: z.number().int().positive(),
-    every: z.number().int().positive()
+    span: z.number().int().positive()
   }),
-  z.strictObject({
-    kind: z.literal('class'),
-    every: z.number().int().positive()
-  }),
-  z.strictObject({
-    kind: z.literal('vowels'),
-    every: z.number().int().positive()
-  }),
+  z.strictObject({ kind: z.literal('class') }),
+  z.strictObject({ kind: z.literal('vowels') }),
   z.strictObject({
     kind: z.literal('phrase'),
     span: z.number().int().positive()
@@ -61,6 +51,8 @@ const colorSchema = z.discriminatedUnion('kind', [
 const voiceSchema = z
   .object({
     enabled: z.boolean(),
+    divisor: z.number().int().positive(),
+    stride: z.number().int().positive(),
     toneMs: z.number().positive(),
     decay: z.number().positive(),
     swell: z.number().min(0).max(1),
@@ -88,7 +80,7 @@ const voiceSchema = z
 const settingsSchema = z
   .object({
     preset: z.enum(PRESET_NAMES),
-    minIntervalMs: z.number().min(0),
+    tickHz: z.number().positive(),
     backend: z.enum(['afplay', 'ffplay']),
     voices: z
       .object({ text: voiceSchema, thinking: voiceSchema, tool: voiceSchema })
@@ -144,6 +136,8 @@ const mergeVoice = (
   patch: VoicePatch = {}
 ): VoiceConfig => ({
   enabled: patch.enabled ?? base.enabled,
+  divisor: patch.divisor ?? base.divisor,
+  stride: patch.stride ?? base.stride,
   toneMs: patch.toneMs ?? base.toneMs,
   decay: patch.decay ?? base.decay,
   swell: patch.swell ?? base.swell,
@@ -163,7 +157,7 @@ export const applyPatch = (
   base: BlipConfig,
   patch: ConfigPatch
 ): BlipConfig => ({
-  minIntervalMs: patch.minIntervalMs ?? base.minIntervalMs,
+  tickHz: patch.tickHz ?? base.tickHz,
   backend: patch.backend ?? base.backend,
   voices: {
     text: mergeVoice(base.voices.text, patch.voices?.text),

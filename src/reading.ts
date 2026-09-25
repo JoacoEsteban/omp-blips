@@ -14,25 +14,19 @@ const TERMINALS = '.!?'
 const WHITESPACE = /\s/u
 
 /**
- * How a voice consumes characters: which ones are voiced, which ones are
- * silent, how many it spends on one blip, and what index a voiced one carries.
- * The index means nothing on its own — `pitch.ts` decides what it sounds like.
+ * How a voice reads a character: which ones are voiced, which ones are silent,
+ * and what index a voiced one carries. The index means nothing on its own —
+ * `pitch.ts` decides what it sounds like.
  *
- * The rate belongs here and not to the voice. A reading that samples every `n`
- * sounded characters says so; `phrase` has no such field, because it already
- * paces itself by the words of the text. A counter outside the reading would
- * land on an arbitrary character of each word and lose the shape the reading
- * built.
+ * The rate does not belong here. A reading answers what a character is; the
+ * shared grid and the voice's `stride` answer when it is heard and how much
+ * text one blip stands for.
  */
 export type ReadingConfig =
-  | { readonly kind: 'alphabet'; readonly every: number }
-  | {
-      readonly kind: 'codepoint'
-      readonly span: number
-      readonly every: number
-    }
-  | { readonly kind: 'class'; readonly every: number }
-  | { readonly kind: 'vowels'; readonly every: number }
+  | { readonly kind: 'alphabet' }
+  | { readonly kind: 'codepoint'; readonly span: number }
+  | { readonly kind: 'class' }
+  | { readonly kind: 'vowels' }
   | { readonly kind: 'phrase'; readonly span: number }
 
 /**
@@ -185,62 +179,12 @@ class Phrase implements Reading {
   }
 }
 
-/**
- * Spends `every` sounded characters on one blip. Silent characters cost
- * nothing, so the rate stays the same in prose and in dense tool arguments.
- */
-class Sampled implements Reading {
-  constructor(
-    private readonly every: number,
-    private readonly inner: Reading,
-    private readonly spent: number
-  ) {}
-
-  read(char: string): readonly [Reading, number | undefined] {
-    const [inner, index] = this.inner.read(char)
-    return match(index)
-      .with(P.nullish, () => [this.carrying(inner), undefined] as const)
-      .otherwise((sounded) =>
-        match(this.spent + 1 >= this.every)
-          .with(
-            false,
-            () =>
-              [
-                new Sampled(this.every, inner, this.spent + 1),
-                undefined
-              ] as const
-          )
-          .with(
-            true,
-            () => [new Sampled(this.every, inner, 0), sounded] as const
-          )
-          .exhaustive()
-      )
-  }
-
-  private carrying(inner: Reading): Sampled {
-    return new Sampled(this.every, inner, this.spent)
-  }
-}
-
 /** The cursor a voice starts from, and returns to whenever its reading changes. */
 export const readingOf = (config: ReadingConfig): Reading =>
   match(config)
-    .with(
-      { kind: 'alphabet' },
-      ({ every }) => new Sampled(every, new Alphabet(), 0)
-    )
-    .with(
-      { kind: 'codepoint' },
-      ({ span, every }) => new Sampled(every, new Codepoint(span), 0)
-    )
-    .with(
-      { kind: 'class' },
-      ({ every }) => new Sampled(every, new CharacterClass(), 0)
-    )
-    .with(
-      { kind: 'vowels' },
-      ({ every }) => new Sampled(every, new Vowels(), 0)
-    )
+    .with({ kind: 'alphabet' }, () => new Alphabet())
+    .with({ kind: 'codepoint' }, ({ span }) => new Codepoint(span))
+    .with({ kind: 'class' }, () => new CharacterClass())
+    .with({ kind: 'vowels' }, () => new Vowels())
     .with({ kind: 'phrase' }, ({ span }) => new Phrase(span, 0, 0))
     .exhaustive()

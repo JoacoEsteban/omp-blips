@@ -60,8 +60,7 @@ export const voicingOf = (session: Session, kind: StreamKind): Voicing => ({
   voice: match(enabled(session, kind))
     .with(true, () => session.settings.config.voices[kind])
     .with(false, () => undefined)
-    .exhaustive(),
-  minIntervalMs: session.settings.config.minIntervalMs
+    .exhaustive()
 })
 
 /** The device this session asks for. Nothing enabled means no process at all. */

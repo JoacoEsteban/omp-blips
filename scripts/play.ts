@@ -7,12 +7,13 @@ import {
   map,
   type Observable,
   of,
+  takeUntil,
   tap,
   timer
 } from 'rxjs'
 import type { BlipConfig, StreamKind } from '../src/config.ts'
 import { play, playback } from '../src/player.ts'
-import { type Blip, tonesFrom } from '../src/stream.ts'
+import { type Blip, gridFrom, gridPeriodMs, tonesFrom } from '../src/stream.ts'
 
 /** How long the device stays open after the last character, in tone lengths. */
 const TAIL = 6
@@ -34,8 +35,21 @@ export const playText = (
 ): Observable<never> =>
   defer(() => {
     const voice = config.voices[kind]
-    const blips = characters(text, config.minIntervalMs).pipe(
-      tonesFrom(of({ voice, minIntervalMs: config.minIntervalMs })),
+    // Arrive at the rate the grid reads, so an audition hears the preset's
+    // tempo and its whole text instead of a catch-up stride skipping through.
+    const periodMs = gridPeriodMs(config.tickHz)
+    const delayMs = (periodMs * voice.divisor) / voice.stride
+    const arrivalMs = Array.from(text).length * delayMs
+
+    const blips = characters(text, delayMs).pipe(
+      tonesFrom(
+        of({ voice }),
+        // The grid outlives the text by a few ticks, long enough to read the
+        // tail, and then ends so the run can complete.
+        gridFrom(of(config.tickHz)).pipe(
+          takeUntil(timer(arrivalMs + periodMs * voice.divisor * 4))
+        )
+      ),
       tap((blip) => onBlip?.(blip))
     )
 

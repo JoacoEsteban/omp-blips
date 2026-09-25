@@ -1,10 +1,12 @@
 {
   "preset": "default",
   "backend": "ffplay",
-  "minIntervalMs": 70,
+  "tickHz": 20,
   "voices": {
     "text": {
       "enabled": true,
+      "divisor": 2,
+      "stride": 3,
       "toneMs": 55,
       "decay": 1,
       "swell": 0,
@@ -15,7 +17,7 @@
       "material": "ceramic",
       "touch": "normal",
       "baseFrequency": 220,
-      "reading": { "kind": "alphabet", "every": 3 },
+      "reading": { "kind": "alphabet" },
       "pitch": {
         "kind": "scalar",
         "scale": [0, 2, 4, 7, 9],
@@ -24,6 +26,8 @@
       }
     },
     "thinking": {
+      "divisor": 3,
+      "stride": 4,
       "volume": 0.32,
       "hold": 0.6,
       "swell": 0.2,

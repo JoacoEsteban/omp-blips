@@ -17,17 +17,23 @@ The agent sends a `message_update` event for each small part of the answer. Each
   arguments.
 
 The extension gives each of the three types a different voice. Each voice has a reading and a
-pitch. The reading consumes the characters and decides which ones make a blip. The pitch turns the
-number from the reading into a frequency.
+pitch. The reading answers what a character is. The pitch turns the number from the reading into a
+frequency.
 
-The reading also holds the rate. A reading that samples characters has an `every` value: it makes
-one blip for each `every` sounded characters, and a silent character costs nothing. As a result the
-rate stays the same in prose and in dense tool arguments. A reading that follows the structure of
-the text has no `every` value, because the text gives it the rate.
+The reading does not hold the rate. A shared grid does. The `tickHz` option sets that grid, in
+ticks per second, for the whole extension. Each voice sounds on every `divisor` ticks of it, so
+the three voices stay locked to each other instead of drifting apart. Arrival of text never moves
+the grid: a delta only adds to a buffer, and the grid reads that buffer.
+
+The `stride` option of a voice is the sampling interval in the text. It is the number of
+characters the reading walks for one blip, and the blip takes the last number that walk produced.
+When the model writes faster than the grid reads, the stride widens and stays wide until the buffer is empty.
+A burst drains within eight ticks assigned to that voice, unless the message ends first and discards the unread text.
+New text can widen the stride further. The tempo does not change. Each blip stands for more text.
 
 The default reading is `alphabet`: `a` is 0, `z` is 25, and the digits continue above the letters.
-All other characters are silent. Because space and punctuation are silent, the rhythm of the blips
-follows the words of the text.
+All other characters are silent. A stride that crosses only whitespace makes no blip, so the
+rhythm of the blips still follows the words of the text.
 
 The default pitch is `scalar`. It puts the number in a musical scale of five or six notes per
 octave. A pentatonic scale avoids many close semitone steps. Modal resonances add inharmonic
@@ -55,8 +61,14 @@ session and an event, and it returns the next session. It changes nothing in pla
 configuration files. What they read becomes the event that the reducer gets.
 
 `src/stream.ts` makes blips from the deltas. It groups the chunks by stream kind, so each voice
-counts its own characters. One fold for each group counts the sounded characters and makes the tone.
-A pace operator then drops the tones that come inside `minIntervalMs`.
+keeps its own cursor into its own text. A delta only appends to that text. The shared grid is one
+timer, and every tick of it is a chance for a cursor to walk its stride and make a tone.
+Message boundaries reset the cursors, not the grid. The clock keeps its phase between messages.
+
+The period of the grid is rounded to a whole number of mixer ticks. The mixer starts a tone at the
+head of the block it is writing, so a period off its own grid would place tones a tick early or
+late at random. That is invisible on a screen and audible in a beat.
+Auditions use the same rounded period for character arrival and the playback deadline.
 
 `src/player.ts` maps the session to one device. A different backend, or a mute of all three voices,
 closes the process that runs. The next state opens the device that it asks for.
@@ -66,7 +78,7 @@ come out. The state is a value, so the same events always give the same audio.
 `src/players/ffplay.ts` writes those blocks to the process.
 
 A subscription starts the audio, and the end of the subscription stops it. The `session_shutdown`
-event completes the graph, so no process stays behind.
+event stops the upstream commands and grid timer and closes the audio process.
 
 The scripts use the same pipeline. The sound lab keeps a pure model-and-commands loop for the
 display, and it puts every effect in the graph.
@@ -134,9 +146,10 @@ touch, and a sound version. Volume is applied during playback, so it is not part
 
 Old cache files remain in `$TMPDIR/omp-blips`. New sound keys prevent reuse of old fixed-synth files.
 
-The `minIntervalMs` option sets the minimum time between two blips of the same voice. A fast stream
-loses blips and does not become a mass of sound. Each voice has its own floor, so a long block of
-reasoning does not take the blips of the answer text.
+The `tickHz` option sets the grid the whole extension sounds on, and the `divisor` of a voice
+picks how many of those ticks one of its blips costs. A voice at `divisor: 2` on a 20 Hz grid
+makes ten blips a second, whatever the model does. A fast stream widens the stride instead of
+stacking sound, so the tempo you set is the tempo you hear.
 
 ## Interruption
 
@@ -172,23 +185,23 @@ profile: `src/preset-sans.ts`. The default preset has the name `default`.
 
 The six presets after `quiet` each show one reading or one pitch with nothing in its way:
 
-- `haiku` gives `phrase` long tones and a low pace floor, so no word is lost.
+- `haiku` gives `phrase` long tones on a slow grid, so no word is lost.
 - `pulse` puts `phrase` against `drone`. The reading keeps the words and the pitch drops the
   melody, so only the rhythm remains.
 - `plainchant` keeps `vowels` in one octave. Vowels are the part of a word that a singer holds.
-- `cipher` puts `alphabet` against `chromatic` at one blip for each letter. The pitch goes up with
+- `cipher` puts `alphabet` against `chromatic` at a stride of one letter. The pitch goes up with
   the alphabet and there is no scale, so `a` is always the same note.
-- `telegraph` puts `class` against `drone` at one blip for each character. Only whitespace is
+- `telegraph` puts `class` against `drone` at a stride of one character. Only whitespace is
   silent, so the words show as gaps.
 - `hexdump` reads the tool arguments character by character. It is the one preset in which the
   tool voice leads.
 
 `sans` uses the dedicated `vocal` material for a low character voice. Each text blip lasts 140 milliseconds
 at 164.81 Hz. It rises across its first 15%, holds until its midpoint, then fades.
-The character interval remains 66 milliseconds, independent of the blip duration.
-One character shape is used for every character.
+The grid stays at 15.2 ticks a second, independent of the blip duration.
+One character shape is used for each character.
 The reasoning voice uses the same renderer and envelope with a quieter, softer touch,
-at 123.47 Hz and half the character rate. The tool voice remains a short stone knock.
+at 123.47 Hz, reading twice as much text for each blip. The tool voice remains a short stone knock.
 
 The `vocal` renderer uses measured harmonic phase and amplitude controls for harmonics up to about 10,000 Hz.
 Its intrinsic contour adds rising pitch and cycle motion during each tone. All samples come from this
@@ -221,14 +234,14 @@ ends. To see the list of names, run `/blips presets`.
 
 These values are the values of the preset `default`. Another preset gives other values.
 
-| Stream     | Lowest pitch | Reading             | Pitch                                       | Material | Touch  | Sound                        |
-| ---------- | ------------ | ------------------- | ------------------------------------------- | -------- | ------ | ---------------------------- |
-| `text`     | 220 Hz       | `alphabet`, every 3 | scalar, major pentatonic, 3 octaves, `wrap` | ceramic  | normal | the melody that you follow   |
-| `thinking` | 147 Hz       | `alphabet`, every 4 | scalar, minor pentatonic, 2 octaves, `fold` | wood     | soft   | a dark murmur below the text |
-| `tool`     | 523 Hz       | `alphabet`, every 6 | scalar, major pentatonic, 2 octaves, `wrap` | glass    | soft   | short bright ticks           |
+| Stream     | Lowest pitch | Reading              | Pitch                                       | Material | Touch  | Sound                        |
+| ---------- | ------------ | -------------------- | ------------------------------------------- | -------- | ------ | ---------------------------- |
+| `text`     | 220 Hz       | `alphabet`, stride 3 | scalar, major pentatonic, 3 octaves, `wrap` | ceramic  | normal | the melody that you follow   |
+| `thinking` | 147 Hz       | `alphabet`, stride 4 | scalar, minor pentatonic, 2 octaves, `fold` | wood     | soft   | a dark murmur below the text |
+| `tool`     | 523 Hz       | `alphabet`, stride 8 | scalar, major pentatonic, 2 octaves, `wrap` | glass    | soft   | short bright ticks           |
 
-The `tool` voice makes fewer blips than the other two voices. Tool arguments are JSON and contain
-many characters.
+The `tool` voice sounds on every tick of the grid, but it takes the longest stride. Tool arguments
+are JSON and contain many characters, so one blip stands for more of them.
 
 Each voice selects its own reading and its own pitch. The preset `gamelan` shows why: the two prose
 voices read phrases, and the `tool` voice plays one pitch for dense JSON.
@@ -240,23 +253,25 @@ character silent, or it waits for more characters. The file `src/reading.ts` hol
 reading is a cursor: it reads one character and returns the reading that continues after it. A
 reading with memory keeps its state inside that cursor.
 
-Each reading holds its own rate. This is the reason that a voice has no global counter: a counter
-outside the reading lands on an arbitrary character of each word, and the shape that the reading
-builds does not reach your ear.
+A voice has no counter of its own. The grid decides when a blip happens and the `stride` of the
+voice decides how much text it crosses; the reading only answers what the characters in that span
+were.
 
-| Reading     | Behavior                                                                      | Rate         |
-| ----------- | ----------------------------------------------------------------------------- | ------------ |
-| `alphabet`  | Letters, then digits. All other characters are silent.                        | `every`      |
-| `codepoint` | Each visible character, after a division by `span`. Punctuation sounds too.   | `every`      |
-| `class`     | Four numbers: vowel, consonant, digit, punctuation. Whitespace is silent.     | `every`      |
-| `vowels`    | Vowels only, by their position in `aeiou`. The text becomes much more sparse. | `every`      |
-| `phrase`    | One blip for each word. The length of a word moves the pitch of the next one. | one per word |
+| Reading     | Behavior                                                                      |
+| ----------- | ----------------------------------------------------------------------------- |
+| `alphabet`  | Letters, then digits. All other characters are silent.                        |
+| `codepoint` | Each visible character, after a division by `span`. Punctuation sounds too.   |
+| `class`     | Four numbers: vowel, consonant, digit, punctuation. Whitespace is silent.     |
+| `vowels`    | Vowels only, by their position in `aeiou`. The text becomes much more sparse. |
+| `phrase`    | One blip for each word. The length of a word moves the pitch of the next one. |
 
-`every` is a number of sounded characters for one blip. A silent character costs nothing.
+A blip takes the last number that its stride produced. A stride that crosses only silent
+characters makes no blip at all, which is the rest that the text asked for.
 
-`phrase` has memory and no `every` value. It makes one blip at the start of each word. The length
-of that word then moves the floor of the next word, and the floor returns to zero after a full
-stop, a question mark or an exclamation mark.
+`phrase` has memory. It makes one number at the start of each word. The length of that word then
+moves the floor of the next word, and the floor returns to zero after a full stop, a question mark
+or an exclamation mark. Its stride is still the span the grid walks, so a slow grid against
+`phrase` reads one word for each blip.
 
 The text moves the pitch, and not a counter. A counter adds the same value after each word, which
 gives a scale run or a short figure that repeats. Word lengths are different, so a short word makes
@@ -410,7 +425,7 @@ preset, then the first file, then the second file. A file gives only the keys th
 {
   "preset": "gamelan",
   "backend": "ffplay",
-  "minIntervalMs": 70,
+  "tickHz": 20,
   "voices": {
     "thinking": {
       "volume": 0.4,
@@ -426,17 +441,19 @@ preset, then the first file, then the second file. A file gives only the keys th
 
 ### Keys
 
-| Key             | Type                     | Function                                                              |
-| --------------- | ------------------------ | --------------------------------------------------------------------- |
-| `backend`       | `"ffplay"` or `"afplay"` | The backend that plays the tones.                                     |
-| `preset`        | a preset name            | The preset that gives the start values.                               |
-| `minIntervalMs` | number                   | The minimum time in milliseconds between two blips of the same voice. |
+| Key       | Type                     | Function                                                          |
+| --------- | ------------------------ | ----------------------------------------------------------------- |
+| `backend` | `"ffplay"` or `"afplay"` | The backend that plays the tones.                                 |
+| `preset`  | a preset name            | The preset that gives the start values.                           |
+| `tickHz`  | positive number          | The shared grid, in ticks per second, that every voice sounds on. |
 
 Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts these keys:
 
 | Key             | Type                                                                           | Function                                                        |
 | --------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------- |
 | `enabled`       | boolean                                                                        | Starts this voice at the start of a session.                    |
+| `divisor`       | positive integer                                                               | Ticks of the grid spent on one blip of this voice.              |
+| `stride`        | positive integer                                                               | Characters the reading walks for one blip.                      |
 | `toneMs`        | number                                                                         | The length of one tone in milliseconds.                         |
 | `decay`         | positive number                                                                | Multiplies the material's decay rate. Lower values ring longer. |
 | `swell`         | number from 0 to 1                                                             | The part of the tone spent rising to full level.                |

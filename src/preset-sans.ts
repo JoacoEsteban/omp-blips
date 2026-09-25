@@ -10,9 +10,11 @@ export const sansPreset: Preset = {
     'A rising vocal blip. Rounded low tones, one for each character.',
   patch: {
     // Keep the character cadence independent of the longer vocal envelope.
-    minIntervalMs: 66,
+    tickHz: 15.2,
     voices: {
       text: {
+        divisor: 1,
+        stride: 1,
         toneMs: 140,
         decay: 5,
         // A short rise, a held body, then a fade across the second half.
@@ -23,10 +25,12 @@ export const sansPreset: Preset = {
         material: 'vocal',
         touch: 'normal',
         baseFrequency: 164.81,
-        reading: { kind: 'class', every: 1 },
+        reading: { kind: 'class' },
         pitch: { kind: 'drone' }
       },
       thinking: {
+        divisor: 1,
+        stride: 2,
         toneMs: 140,
         decay: 5,
         swell: 0.15,
@@ -38,12 +42,14 @@ export const sansPreset: Preset = {
         baseFrequency: 123.47,
         material: 'vocal',
         touch: 'soft',
-        reading: { kind: 'class', every: 2 },
+        reading: { kind: 'class' },
         pitch: { kind: 'drone' }
       },
       // Not speech: a dry knock under the voice, and the one struck sound in
       // the preset.
       tool: {
+        divisor: 1,
+        stride: 3,
         toneMs: 28,
         decay: 1.5,
         swell: 0,
@@ -53,7 +59,7 @@ export const sansPreset: Preset = {
         material: 'stone',
         touch: 'firm',
         baseFrequency: 146.83,
-        reading: { kind: 'class', every: 3 },
+        reading: { kind: 'class' },
         pitch: { kind: 'drone' }
       }
     }

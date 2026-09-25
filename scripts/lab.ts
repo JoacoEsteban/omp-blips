@@ -24,7 +24,7 @@ import { play } from '../src/player.ts'
 import { ffplay } from '../src/players/ffplay.ts'
 import { type PresetName, PRESET_NAMES, presets } from '../src/presets.ts'
 import { loadSettings } from '../src/settings.ts'
-import { tonesFrom, type Voicing } from '../src/stream.ts'
+import { gridFrom, tonesFrom, type Voicing } from '../src/stream.ts'
 
 const DEFAULT_STREAM_DELAY_MS = 10
 const MIN_STREAM_DELAY_MS = 1
@@ -77,16 +77,19 @@ interface Lab {
   readonly setClock: (clock: Clock) => void
   /** Change the voice. The blip count starts again from zero. */
   readonly setVoicing: (voicing: Voicing) => void
+  /** Change the shared grid every voice sounds on. */
+  readonly setTickHz: (hz: number) => void
   readonly emit: (char: string) => void
   readonly stop: () => void
 }
 
-const createLab = (initial: Voicing): Lab => {
+const createLab = (initial: Voicing, initialTickHz: number): Lab => {
   const clock = new BehaviorSubject<Clock>({
     paused: false,
     delayMs: DEFAULT_STREAM_DELAY_MS
   })
   const voicing = new BehaviorSubject<Voicing>(initial)
+  const tickHz = new BehaviorSubject<number>(initialTickHz)
   const characters = new Subject<string>()
 
   const ticks = clock.pipe(
@@ -103,8 +106,9 @@ const createLab = (initial: Voicing): Lab => {
     map((): Msg => ({ type: 'stream-character' }))
   )
 
+  const grid = gridFrom(tickHz)
   const commands = voicing.pipe(
-    switchMap((current) => characters.pipe(tonesFrom(of(current)))),
+    switchMap((current) => characters.pipe(tonesFrom(of(current), grid))),
     map(({ tone }) => play(tone)),
     share({
       resetOnRefCountZero: false,
@@ -123,11 +127,13 @@ const createLab = (initial: Voicing): Lab => {
     ticks,
     setClock: (next) => clock.next(next),
     setVoicing: (next) => voicing.next(next),
+    setTickHz: (next) => tickHz.next(next),
     emit: (char) => characters.next(char),
     stop: () => {
       audio.unsubscribe()
       characters.complete()
       voicing.complete()
+      tickHz.complete()
       clock.complete()
     }
   }
@@ -223,19 +229,15 @@ const voiceFor = (model: Model): VoiceConfig =>
     .with('call', () => model.config.voices.tool)
     .exhaustive()
 
-/** The reading and pitch of a voice, short enough for one status line. */
+/** What the reading answers: the note a character carries, not how often. */
 const readingLabel = (reading: ReadingConfig): string =>
   match(reading)
-    .with(
-      { kind: 'codepoint' },
-      ({ span, every }) =>
-        `codepoint ${String(span)} every ${String(every)} chars`
-    )
+    .with({ kind: 'codepoint' }, ({ span }) => `codepoint ${String(span)}`)
     .with(
       { kind: 'phrase' },
       ({ span }) => `phrase ${String(span)} one per word`
     )
-    .otherwise(({ kind, every }) => `${kind} every ${String(every)} chars`)
+    .otherwise(({ kind }) => kind)
 
 const pitchLabel = (pitch: PitchConfig): string =>
   match(pitch)
@@ -260,8 +262,7 @@ const voicingFor = (model: Model): Voicing => {
     voice: match(voice.enabled)
       .with(true, () => voice)
       .with(false, () => undefined)
-      .exhaustive(),
-    minIntervalMs: model.config.minIntervalMs
+      .exhaustive()
   }
 }
 
@@ -285,6 +286,7 @@ const tuned = (lab: Lab, model: Model): [Model, Cmd<Msg>[]] => [
   model,
   [
     effect(() => lab.setVoicing(voicingFor(model))),
+    effect(() => lab.setTickHz(model.config.tickHz)),
     effect(() => lab.setClock(clockFor(model)))
   ]
 ]
@@ -522,6 +524,7 @@ const createLabApp = (
       choiceLine('preset', PRESET_NAMES, model.presetIndex),
       '',
       `${accent('sound')}  ${voice.touch} touch  ${String(voice.toneMs)} ms  ${voice.baseFrequency.toFixed(2)} Hz  swell ${voice.swell.toFixed(2)}  hold ${voice.hold.toFixed(2)}  glide ${voice.glide.toFixed(1)}st`,
+      `${accent('grid')}   ${model.config.tickHz.toFixed(1)} Hz / ${String(voice.divisor)} = ${(model.config.tickHz / voice.divisor).toFixed(1)} blips/s  stride ${String(voice.stride)}  ring ${(voice.toneMs / ((1000 / model.config.tickHz) * voice.divisor)).toFixed(2)}`,
       `${accent('voice')}  ${readingLabel(voice.reading)} -> ${pitchLabel(voice.pitch)}  colour ${colorLabel(voice.color)}`,
       `${accent('preset')} ${presets[preset].description}`,
       speedSlider(model.streamSpeedIndex),
@@ -547,10 +550,10 @@ const createLabApp = (
 })
 
 const initialConfig = configFor('default')
-const lab = createLab({
-  voice: initialConfig.voices.text,
-  minIntervalMs: initialConfig.minIntervalMs
-})
+const lab = createLab(
+  { voice: initialConfig.voices.text },
+  initialConfig.tickHz
+)
 
 try {
   await startApp(createLabApp(lab, initialConfig))

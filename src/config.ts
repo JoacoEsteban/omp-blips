@@ -17,6 +17,18 @@ export type StreamKind = 'text' | 'thinking' | 'tool'
 /** Voicing for one stream kind, so the three are audibly distinguishable. */
 export interface VoiceConfig {
   readonly enabled: boolean
+  /**
+   * Ticks of the shared grid spent on one blip. The grid is global so the three
+   * voices stay locked to each other; this is the only rate a voice chooses,
+   * and it chooses a multiple rather than a rate of its own.
+   */
+  readonly divisor: number
+  /**
+   * Graphemes the cursor walks for each blip. It is the sampling interval in
+   * the text, not in time: the grid decides when a blip happens, this decides
+   * how much text that blip stands for.
+   */
+  readonly stride: number
   /** Length of a single tone, in milliseconds. */
   readonly toneMs: number
   /** Multiplier for the material's modal decay rate; lower values ring longer. */
@@ -44,8 +56,12 @@ export interface VoiceConfig {
 }
 
 export interface BlipConfig {
-  /** Floor between two blips of any kind; faster streams get thinned out instead of stacked. */
-  readonly minIntervalMs: number
+  /**
+   * The shared grid, in ticks per second. Every voice sounds on a multiple of
+   * it, so tempo is a property of the preset rather than of how fast the
+   * provider happens to deliver its deltas.
+   */
+  readonly tickHz: number
   /** Which playback backend to use. */
   readonly backend: BackendName
   readonly voices: Record<StreamKind, VoiceConfig>
@@ -58,19 +74,22 @@ export type VoicePatch = {
 
 /** A partial config: presets and config files are both this shape. */
 export interface ConfigPatch {
-  readonly minIntervalMs?: number | undefined
+  readonly tickHz?: number | undefined
   readonly backend?: BackendName | undefined
   readonly voices?:
     { readonly [K in StreamKind]?: VoicePatch | undefined } | undefined
 }
 
 export const defaultConfig: BlipConfig = {
-  minIntervalMs: 70,
+  tickHz: 20,
   backend: 'ffplay',
   voices: {
-    // Prose: mid register, the voice the ear tracks.
+    // Prose: mid register, the voice the ear tracks. Every other tick, so it
+    // sits at half the grid and the other two read against it.
     text: {
       enabled: true,
+      divisor: 2,
+      stride: 3,
       toneMs: 55,
       decay: 1,
       swell: 0,
@@ -81,7 +100,7 @@ export const defaultConfig: BlipConfig = {
       color: { kind: 'fixed', at: 0.5 },
       touch: 'normal',
       baseFrequency: 220,
-      reading: { kind: 'alphabet', every: 3 },
+      reading: { kind: 'alphabet' },
       pitch: {
         kind: 'scalar',
         scale: MAJOR_PENTATONIC,
@@ -93,6 +112,8 @@ export const defaultConfig: BlipConfig = {
     // lose on laptop speakers, so it sits at 146.83 Hz (D3) with more gain.
     thinking: {
       enabled: true,
+      divisor: 3,
+      stride: 4,
       toneMs: 90,
       decay: 1,
       swell: 0,
@@ -103,7 +124,7 @@ export const defaultConfig: BlipConfig = {
       color: { kind: 'fixed', at: 0.5 },
       touch: 'soft',
       baseFrequency: 146.83,
-      reading: { kind: 'alphabet', every: 4 },
+      reading: { kind: 'alphabet' },
       pitch: {
         kind: 'scalar',
         scale: MINOR_PENTATONIC,
@@ -111,9 +132,12 @@ export const defaultConfig: BlipConfig = {
         mapping: 'fold'
       }
     },
-    // Tool arguments: short, bright ticks. Dense JSON, so it blips less often.
+    // Tool arguments: short, bright ticks on every beat of the grid. Dense
+    // JSON, so the cursor takes a long stride and each tick stands for more.
     tool: {
       enabled: true,
+      divisor: 1,
+      stride: 8,
       toneMs: 26,
       decay: 1,
       swell: 0,
@@ -124,7 +148,7 @@ export const defaultConfig: BlipConfig = {
       color: { kind: 'fixed', at: 0.5 },
       touch: 'soft',
       baseFrequency: 523.25,
-      reading: { kind: 'alphabet', every: 6 },
+      reading: { kind: 'alphabet' },
       pitch: {
         kind: 'scalar',
         scale: MAJOR_PENTATONIC,
