@@ -1,5 +1,6 @@
 import { match } from 'ts-pattern'
 import { SAMPLE_RATE, toInt16, voice } from '../synth.ts'
+import type { SpatialMotion } from '../spatial.ts'
 import type { Tone } from './types.ts'
 
 /** How often the mixer wakes up to top up the pipe. */
@@ -19,11 +20,66 @@ const MAX_BLOCK_FRAMES =
 /** Samples the flush ramp takes to reach zero. */
 const FADE_FRAMES = Math.max(1, Math.round((FADE_MS * SAMPLE_RATE) / 1000))
 
-/** A rendered tone part-way through the mix. */
+/** A source with one or two channels. The mixer never duplicates a mono cache. */
+export type Source =
+  | { readonly kind: 'mono'; readonly samples: Float32Array }
+  | {
+      readonly kind: 'stereo'
+      readonly left: Float32Array
+      readonly right: Float32Array
+    }
+
+/** Two output samples reused by the renderer for every frame. */
+export interface StereoFrame {
+  left: number
+  right: number
+}
+
+const sourceLength = (source: Source): number => {
+  if (source.kind === 'mono') return source.samples.length
+  return Math.min(source.left.length, source.right.length)
+}
+
+/**
+ * Render one source frame into a stereo frame. Stereo input is treated as one
+ * positioned source: at either hard edge both input channels remain audible,
+ * unlike a balance control which discards one channel.
+ */
+export const renderSource = (
+  source: Source,
+  index: number,
+  pan: number,
+  leftGain: number,
+  rightGain: number,
+  output: StereoFrame
+): void => {
+  if (source.kind === 'mono') {
+    const sample = source.samples[index] ?? 0
+    output.left = sample * leftGain
+    output.right = sample * rightGain
+    return
+  }
+
+  const left = source.left[index] ?? 0
+  const right = source.right[index] ?? 0
+  if (pan > 0) {
+    output.left = left * (1 - pan)
+    output.right = right + left * pan
+    return
+  }
+  output.left = left + right * -pan
+  output.right = right * (1 + pan)
+}
+
 interface Ringing {
-  readonly samples: Float32Array
+  readonly source: Source
   readonly gain: number
   readonly offset: number
+  readonly spatial: Tone['spatial']
+  /** Zero means ringing naturally; positive means a per-tone release is active. */
+  readonly release: number
+  readonly leftGain: number
+  readonly rightGain: number
 }
 
 /**
@@ -37,8 +93,6 @@ export interface MixerState {
   readonly ringing: readonly Ringing[]
   /** Samples handed to the device so far. */
   readonly cursor: number
-  /** Samples left in an in-progress flush ramp; 0 when no flush is pending. */
-  readonly fade: number
   readonly lastToneAt: number
   /** No further tones can arrive: the command stream is finished. */
   readonly ended: boolean
@@ -58,86 +112,132 @@ export const openMixer = (at: number): MixerState => ({
   openedAt: at,
   ringing: [],
   cursor: 0,
-  fade: 0,
   lastToneAt: at,
   ended: false,
   block: undefined,
   done: false
 })
 
-/** Age every voice by `frames` samples, retiring the ones that ran out. */
+const panGains = (pan: number): readonly [number, number] => {
+  const bounded = Math.max(-1, Math.min(1, pan))
+  const angle = ((bounded + 1) * Math.PI) / 4
+  return [Math.cos(angle), Math.sin(angle)]
+}
+
+const motionPan = (
+  base: number,
+  motion: SpatialMotion,
+  offset: number,
+  cursor: number,
+  openedAt: number
+): number => {
+  let elapsed = (offset * 1000) / SAMPLE_RATE
+  if (motion.clock === 'voice')
+    elapsed = openedAt + (cursor * 1000) / SAMPLE_RATE
+  const pan =
+    base + motion.depth * Math.sin((2 * Math.PI * elapsed) / motion.periodMs)
+  return Math.max(-1, Math.min(1, pan))
+}
+
+/** Age every source by `frames` samples, retiring ended or released voices. */
 const advance = (
   ringing: readonly Ringing[],
   frames: number
 ): readonly Ringing[] =>
-  ringing
-    .filter((sound) => sound.offset + frames < sound.samples.length)
-    .map((sound) => ({
-      samples: sound.samples,
-      gain: sound.gain,
-      offset: sound.offset + frames
-    }))
+  ringing.flatMap((sound) => {
+    const offset = sound.offset + frames
+    const release = Math.max(0, sound.release - frames)
+    const ended = offset >= sourceLength(sound.source)
+    if (ended || (sound.release > 0 && release === 0)) return []
+    return [{ ...sound, offset, release }]
+  })
 
 interface Mixed {
   readonly block: Buffer
-  readonly fade: number
-  /** The flush ramp reached zero inside this block; the voices are spent. */
-  readonly cut: boolean
+  readonly ringing: readonly Ringing[]
 }
 
-/** Sum `frames` samples of the ringing voices into little-endian PCM. */
+/** Sum `frames` samples of the ringing voices into interleaved stereo PCM. */
 const mixBlock = (
   ringing: readonly Ringing[],
-  fade: number,
-  frames: number
+  frames: number,
+  cursor: number,
+  openedAt: number
 ): Mixed => {
-  const block = Buffer.alloc(frames * 2)
-  let remaining = fade
-  let cut = false
+  const block = Buffer.alloc(frames * 4)
+  const frame: StereoFrame = { left: 0, right: 0 }
 
-  // Once the ramp retires the voices there is nothing left to sum, and the rest
-  // of the block stays at the zeros `alloc` already wrote.
-  for (let i = 0; i < frames && !cut && ringing.length > 0; i += 1) {
-    let sum = 0
+  for (let i = 0; i < frames && ringing.length > 0; i += 1) {
+    let left = 0
+    let right = 0
     for (const sound of ringing) {
-      const sample = sound.samples[sound.offset + i]
-      if (sample !== undefined) sum += sample * sound.gain
+      const motion = sound.spatial.motion
+      let pan = sound.spatial.at
+      let leftGain = sound.leftGain
+      let rightGain = sound.rightGain
+      if (motion !== undefined) {
+        pan = motionPan(
+          sound.spatial.at,
+          motion,
+          sound.offset + i,
+          cursor + i,
+          openedAt
+        )
+        const angle = ((pan + 1) * Math.PI) / 4
+        leftGain = Math.cos(angle)
+        rightGain = Math.sin(angle)
+      }
+      renderSource(
+        sound.source,
+        sound.offset + i,
+        pan,
+        leftGain,
+        rightGain,
+        frame
+      )
+      let releaseGain = 1
+      if (sound.release > 0)
+        releaseGain = Math.max(0, sound.release - i - 1) / FADE_FRAMES
+      left += frame.left * sound.gain * releaseGain
+      right += frame.right * sound.gain * releaseGain
     }
-
-    if (remaining > 0) {
-      remaining -= 1
-      sum *= remaining / FADE_FRAMES
-      cut = remaining === 0
-    }
-
-    block.writeInt16LE(toInt16(sum), i * 2)
+    block.writeInt16LE(toInt16(left), i * 4)
+    block.writeInt16LE(toInt16(right), i * 4 + 2)
   }
-
-  return { block, fade: remaining, cut }
+  return { block, ringing: advance(ringing, frames) }
 }
 
 const struck = (state: MixerState, tone: Tone, at: number): MixerState => {
-  // A tone arriving mid-ramp means the stream is live again: drop what was
-  // fading rather than let the ramp swallow the new voice too.
-  const ringing = match(state.fade > 0)
-    .with(true, (): readonly Ringing[] => [])
-    .with(false, () => state.ringing)
-    .exhaustive()
-
+  if (state.ringing.length >= MAX_VOICES) return { ...state, block: undefined }
+  const gains = panGains(tone.spatial.at)
   return {
     ...state,
-    fade: 0,
     lastToneAt: at,
-    ringing: match(ringing.length >= MAX_VOICES)
-      .with(true, () => ringing)
-      .with(false, () => [
-        ...ringing,
-        { samples: voice(tone), gain: tone.volume, offset: 0 }
-      ])
-      .exhaustive(),
+    ringing: [
+      ...state.ringing,
+      {
+        source: { kind: 'mono', samples: voice(tone) },
+        gain: tone.volume,
+        offset: 0,
+        spatial: tone.spatial,
+        release: 0,
+        leftGain: gains[0],
+        rightGain: gains[1]
+      }
+    ],
     block: undefined
   }
 }
+
+const releaseAll = (ringing: readonly Ringing[]): readonly Ringing[] =>
+  ringing.map((sound) => {
+    if (sound.release > 0) return sound
+    return { ...sound, release: FADE_FRAMES }
+  })
+/** Render the bounded tail used when the device is torn down externally. */
+export const releaseMixer = (state: MixerState): Buffer =>
+  mixBlock(releaseAll(state.ringing), FADE_FRAMES, state.cursor, state.openedAt)
+    .block
 
 const ticked = (idleMs: number, state: MixerState, at: number): MixerState => {
   const spent = state.ringing.length === 0
@@ -154,22 +254,16 @@ const ticked = (idleMs: number, state: MixerState, at: number): MixerState => {
   // instead: the voices age as if it had played, so audio stays in sync with
   // the text at the cost of a gap.
   const starved = frames - MAX_BLOCK_FRAMES
-  const ready = match(starved > 0)
-    .with(true, () => advance(state.ringing, starved))
-    .with(false, () => state.ringing)
-    .exhaustive()
-
+  let ready = state.ringing
+  if (starved > 0) ready = advance(state.ringing, starved)
   const written = Math.min(frames, MAX_BLOCK_FRAMES)
-  const mixed = mixBlock(ready, state.fade, written)
+  const mixCursor = state.cursor + Math.max(0, starved)
+  const mixed = mixBlock(ready, written, mixCursor, state.openedAt)
 
   return {
     ...state,
     cursor: state.cursor + frames,
-    ringing: match(mixed.cut)
-      .with(true, (): readonly Ringing[] => [])
-      .with(false, () => advance(ready, written))
-      .exhaustive(),
-    fade: mixed.fade,
+    ringing: mixed.ringing,
     block: mixed.block,
     done: false
   }
@@ -186,11 +280,7 @@ export const mixerStep =
       .with({ type: 'play' }, ({ tone, at }) => struck(state, tone, at))
       .with({ type: 'flush' }, () => ({
         ...state,
-        // Nothing rings, so there is nothing to ramp down.
-        fade: match(state.ringing.length > 0)
-          .with(true, () => FADE_FRAMES)
-          .with(false, () => 0)
-          .exhaustive(),
+        ringing: releaseAll(state.ringing),
         block: undefined
       }))
       .with({ type: 'tick' }, ({ at }) => ticked(idleMs, state, at))

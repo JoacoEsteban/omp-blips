@@ -44,6 +44,7 @@ The dedicated `vocal` material uses measured harmonic phase and amplitude contro
 harmonics. Its procedural contour adds intrinsic rising pitch and cycle motion.
 
 The synthesizer renders each sound as mono PCM at runtime. It keeps rendered sounds in memory.
+The mixer places those sounds in stereo without a second copy of each cached sound.
 No sampled audio asset or Python runtime is required.
 
 ## Streams
@@ -313,6 +314,71 @@ A configuration file gives a pitch as an object with a `kind`:
 A file replaces the full `reading` object and the full `pitch` object. It does not merge the parts.
 A half `scalar` pitch and a half `drone` pitch is not a voice.
 
+## Spatial placement
+
+Each voice has a `spatial` object. Presets and configuration files can choose different placement and motion for each voice.
+Existing presets stay centered, with no motion. A file replaces the full `spatial` object rather than merging its parts.
+
+Positions range from `-1` (left only) through `0` (center) to `1` (right only).
+Mono sounds use equal-power panning. Placement does not change their pitch or material.
+
+| Placement    | Configuration                                               | Behavior                                                                       |
+| ------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `fixed`      | `{ "kind": "fixed", "at": -0.3 }`                           | Every blip starts at one position.                                             |
+| `characters` | `groups` of `{ "chars": "...", "at": 0 }`, plus `otherwise` | The selected character determines the position. The first matching group wins. |
+| `alternate`  | `{ "kind": "alternate", "positions": [-0.5, 0.5] }`         | Emitted blips cycle through a nonempty list of positions.                      |
+
+Character groups match complete graphemes with exact case and no Unicode normalization.
+They use the character selected for the blip, not its pitch index or every character crossed by the stride.
+Silent characters do not advance alternation. Message boundaries and cursor resets restart it.
+
+This example sends vowels left, digits right, and other sounded characters to the center:
+
+```json
+{
+  "voices": {
+    "text": {
+      "spatial": {
+        "placement": {
+          "kind": "characters",
+          "groups": [
+            { "chars": "aeiouAEIOU", "at": -1 },
+            { "chars": "0123456789", "at": 1 }
+          ],
+          "otherwise": 0
+        }
+      }
+    }
+  }
+}
+```
+
+### Motion
+
+An optional `motion` adds sinusoidal movement around the placement. The final position stays within `[-1, 1]`.
+`depth` ranges from `0` to `1`. `periodMs` is a positive number of milliseconds for one cycle.
+
+```json
+{
+  "spatial": {
+    "placement": { "kind": "fixed", "at": 0 },
+    "motion": {
+      "kind": "oscillate",
+      "clock": "voice",
+      "depth": 0.6,
+      "periodMs": 2400
+    }
+  }
+}
+```
+
+This object belongs inside a voice. With `clock: "tone"`, each blip starts its motion at its base position.
+With `clock: "voice"`, motion follows the shared monotonic timeline and continues across blips, messages, and device restarts.
+Voices with the same period share the same phase. Motion continues while a tone rings, not only between blips.
+
+The mixer accepts mono and stereo source representations. Stereo sources keep distinct channels at the center and route both channels at either hard edge.
+Current materials still generate mono sources. This change adds no width effects, echo, chorus, or reverb.
+
 ## Scales
 
 The file `src/scales.ts` holds the scales. Each scale has five or six notes in one octave.
@@ -350,8 +416,8 @@ melody moves in small steps and sounds more like a song.
 The extension uses `ffplay`. The code is in `src/players/ffplay.ts`. Install `ffmpeg` before you
 install the extension.
 
-The extension starts one `ffplay` process and keeps it. The process reads raw PCM audio from its
-standard input. A mixer writes new audio each 10 ms and stays 40 ms in front of the clock.
+The extension starts one `ffplay` process and keeps it. The process reads interleaved 16-bit stereo PCM at 44.1 kHz.
+A mixer writes new audio each 10 ms and stays 40 ms in front of the clock.
 
 This design has two results. A tone starts at the next mixer step and does not wait for a new
 process. Two tones that occur together become one mixed sound.
@@ -363,8 +429,9 @@ synchronous with the text, but there is a short gap.
 
 After 20 s without a blip, the extension stops the process. The next blip starts a new process.
 
-A stop decreases the sound to zero in 6 ms. A tone that stops in one step makes a click. Up to 40 ms
-of audio is already in the pipe and stays there, so the silence starts a moment after the stop.
+A flush releases active tones over 6 ms. New tones can start during that release without cutting the old release short.
+When the command stream ends, active tones finish naturally. Mute and shutdown append a short release before the process closes.
+Up to 40 ms of audio is already in the pipe, so silence starts a moment after the stop.
 
 ## Install
 

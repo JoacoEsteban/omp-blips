@@ -47,6 +47,32 @@ const colorSchema = z.discriminatedUnion('kind', [
     span: z.number().int().positive()
   })
 ])
+const panSchema = z.number().finite().min(-1).max(1)
+
+const motionSchema = z.strictObject({
+  kind: z.literal('oscillate'),
+  clock: z.enum(['tone', 'voice']),
+  depth: z.number().finite().min(0).max(1),
+  periodMs: z.number().finite().positive()
+})
+
+const placementSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('fixed'), at: panSchema }),
+  z.strictObject({
+    kind: z.literal('characters'),
+    groups: z.array(z.strictObject({ chars: z.string(), at: panSchema })),
+    otherwise: panSchema
+  }),
+  z.strictObject({
+    kind: z.literal('alternate'),
+    positions: z.array(panSchema).nonempty()
+  })
+])
+
+const spatialSchema = z.strictObject({
+  placement: placementSchema,
+  motion: motionSchema.optional()
+})
 
 const voiceSchema = z
   .object({
@@ -72,7 +98,8 @@ const voiceSchema = z
     touch: z.enum(['soft', 'normal', 'firm']),
     baseFrequency: z.number().positive(),
     reading: readingSchema,
-    pitch: pitchSchema
+    pitch: pitchSchema,
+    spatial: spatialSchema
   })
   .partial()
   .strict()
@@ -148,7 +175,8 @@ const mergeVoice = (
   touch: patch.touch ?? base.touch,
   baseFrequency: patch.baseFrequency ?? base.baseFrequency,
   reading: patch.reading ?? base.reading,
-  pitch: patch.pitch ?? base.pitch
+  pitch: patch.pitch ?? base.pitch,
+  spatial: patch.spatial ?? base.spatial
 })
 
 /** Lay a patch over a full config. Presets and config files take the same path. */

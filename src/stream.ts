@@ -23,6 +23,7 @@ import { match, P } from 'ts-pattern'
 import type { StreamKind, VoiceConfig } from './config.ts'
 import { colorOf } from './color.ts'
 import { frequencyOf } from './pitch.ts'
+import { spatialOf } from './spatial.ts'
 import { type Reading, type ReadingConfig, readingOf } from './reading.ts'
 import { TICK_MS } from './players/mixer.ts'
 import type { Tone } from './players/types.ts'
@@ -175,6 +176,8 @@ interface Cursor {
   readonly catchupStride: number
   readonly reading: Reading | undefined
   readonly source: ReadingConfig | undefined
+  /** Number of blips emitted since this cursor boundary. */
+  readonly ordinal: number
   readonly blip: Blip | undefined
 }
 
@@ -184,6 +187,7 @@ const START: Cursor = {
   catchupStride: 0,
   reading: undefined,
   source: undefined,
+  ordinal: 0,
   blip: undefined
 }
 
@@ -195,7 +199,12 @@ const readingFor = (
     .with({ reading: P.nonNullable, stale: false }, ({ reading: live }) => live)
     .otherwise(() => readingOf(config))
 
-const toneOf = (voice: VoiceConfig, index: number): Tone => ({
+const toneOf = (
+  voice: VoiceConfig,
+  index: number,
+  selected: string,
+  ordinal: number
+): Tone => ({
   frequency: frequencyOf(index, voice),
   toneMs: voice.toneMs,
   decay: voice.decay,
@@ -207,7 +216,8 @@ const toneOf = (voice: VoiceConfig, index: number): Tone => ({
   color: colorOf(index, voice.color),
   material: voice.material,
   touch: voice.touch,
-  volume: voice.volume
+  volume: voice.volume,
+  spatial: spatialOf(selected, ordinal, voice.spatial)
 })
 
 /** One sounding: walk the stride, or more of it when the text got ahead. */
@@ -230,9 +240,15 @@ const drain = (cursor: Cursor, voice: VoiceConfig): Cursor => {
       .exhaustive(),
     reading: walked.reading,
     source: voice.reading,
+    ordinal: match(walked.sounded)
+      .with(P.nullish, () => cursor.ordinal)
+      .otherwise(() => cursor.ordinal + 1),
     blip: match(walked.sounded)
       .with(P.nullish, () => undefined)
-      .otherwise(({ char, index }) => ({ char, tone: toneOf(voice, index) }))
+      .otherwise(({ char, index }) => ({
+        char,
+        tone: toneOf(voice, index, char, cursor.ordinal)
+      }))
   }
 }
 

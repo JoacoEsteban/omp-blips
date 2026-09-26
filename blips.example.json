@@ -13,6 +13,16 @@
       "glide": 0,
       "volume": 0.35,
       "color": { "kind": "fixed", "at": 0.5 },
+      "spatial": {
+        "placement": {
+          "kind": "characters",
+          "groups": [
+            { "chars": "aeiouAEIOU", "at": -0.6 },
+            { "chars": "0123456789", "at": 0.6 }
+          ],
+          "otherwise": 0
+        }
+      },
       "material": "ceramic",
       "touch": "normal",
       "baseFrequency": 220,

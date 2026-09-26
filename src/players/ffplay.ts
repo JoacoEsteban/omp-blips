@@ -24,6 +24,7 @@ import { SAMPLE_RATE } from '../synth.ts'
 import {
   mixerStep,
   openMixer,
+  releaseMixer,
   TICK_MS,
   type MixerEvent,
   type MixerState
@@ -32,6 +33,9 @@ import type { Backend, PlayCommand } from './types.ts'
 
 /** Tear the device down after this much silence; the next tone opens a new one. */
 const IDLE_MS = 20_000
+/** Master fade is short enough not to hold mute/shutdown observably. */
+const MASTER_FADE_MS = 6
+const WRITEAHEAD_MS = 40
 
 const FFPLAY_ARGS = [
   '-hide_banner',
@@ -52,7 +56,7 @@ const FFPLAY_ARGS = [
   '-ar',
   String(SAMPLE_RATE),
   '-ch_layout',
-  'mono',
+  'stereo',
   '-i',
   'pipe:0'
 ]
@@ -77,16 +81,33 @@ const openDevice = (): Device => {
   // A device that dies mid-write is a closed device, not a crash.
   child.stdin?.on('error', () => {})
 
+  let closeTimer: NodeJS.Timeout | undefined
+  let closed = false
+  const cleanup = (): void => {
+    closed = true
+    clearTimeout(closeTimer)
+    closeTimer = undefined
+  }
+  const terminated = (): void => {
+    clearTimeout(closeTimer)
+    closeTimer = undefined
+    child.kill('SIGTERM')
+  }
+  child.once('exit', cleanup)
+  child.once('error', cleanup)
+  const ended = merge(fromEvent(child, 'exit'), fromEvent(child, 'error')).pipe(
+    take(1)
+  )
+
   return {
     write: (block) => {
       child.stdin?.write(block)
     },
-    closed: merge(fromEvent(child, 'exit'), fromEvent(child, 'error')).pipe(
-      take(1)
-    ),
+    closed: ended,
     close: () => {
+      if (closed) return
       child.stdin?.end()
-      child.kill('SIGTERM')
+      closeTimer = setTimeout(terminated, WRITEAHEAD_MS + MASTER_FADE_MS + 10)
     }
   }
 }
@@ -106,10 +127,11 @@ const asMixerEvent = (command: PlayCommand): MixerEvent =>
  * mixer state, and every state that produced audio hands its block on. The
  * stream ends when nothing rings and no further command can arrive.
  */
+
 const blocks = (
   idleMs: number,
   commands: Observable<PlayCommand>
-): Observable<Buffer> =>
+): Observable<MixerState> =>
   defer(() => {
     const opened: MixerState = openMixer(performance.now())
 
@@ -120,9 +142,7 @@ const blocks = (
       )
     ).pipe(
       scan(mixerStep(idleMs), opened),
-      takeWhile((state) => !state.done),
-      map((state) => state.block),
-      filter((block): block is Buffer => block !== undefined)
+      takeWhile((state) => !state.done)
     )
   })
 
@@ -133,13 +153,18 @@ const session = (
 ): Observable<never> =>
   defer(() => {
     const device = openDevice()
+    let latest: MixerState | undefined
 
     return blocks(idleMs, commands).pipe(
-      tap((block) => {
-        device.write(block)
+      tap((state) => {
+        latest = state
+        if (state.block !== undefined) device.write(state.block)
       }),
       takeUntil(device.closed),
-      finalize(device.close),
+      finalize(() => {
+        if (latest !== undefined) device.write(releaseMixer(latest))
+        device.close()
+      }),
       ignoreElements()
     )
   })

@@ -2,6 +2,7 @@ import { MAJOR_PENTATONIC, MINOR_PENTATONIC } from './scales.ts'
 import type { ColorConfig } from './color.ts'
 import type { PitchConfig } from './pitch.ts'
 import type { ReadingConfig } from './reading.ts'
+import type { SpatialConfig } from './spatial.ts'
 import type { Material, Touch } from './synth.ts'
 
 /** Which part of the assistant stream a blip came from. */
@@ -42,10 +43,12 @@ export interface VoiceConfig {
   readonly touch: Touch
   /** Frequency of index 0, and the whole of a `drone` voice. */
   readonly baseFrequency: number
-  /** How characters become indices: what is voiced, what is silent, what an index means. */
+  /** How characters become indices: what is voiced, what is silent, what an index is. */
   readonly reading: ReadingConfig
   /** How an index becomes a frequency. */
   readonly pitch: PitchConfig
+  /** Where this stream's tones sit in the stereo field. */
+  readonly spatial: SpatialConfig
 }
 
 export interface BlipConfig {
@@ -95,7 +98,8 @@ export const defaultConfig: BlipConfig = {
         scale: MAJOR_PENTATONIC,
         octaves: 3,
         mapping: 'wrap'
-      }
+      },
+      spatial: { placement: { kind: 'fixed', at: 0 } }
     },
     // Reasoning: a darker voice below the prose. 110 Hz fundamentals are easy to
     // lose on laptop speakers, so it sits at 146.83 Hz (D3) with more gain.
@@ -119,7 +123,8 @@ export const defaultConfig: BlipConfig = {
         scale: MINOR_PENTATONIC,
         octaves: 2,
         mapping: 'fold'
-      }
+      },
+      spatial: { placement: { kind: 'fixed', at: 0 } }
     },
     // Tool arguments: short, bright ticks on every beat of the grid. Dense
     // JSON, so the cursor takes a long stride and each tick stands for more.
@@ -143,7 +148,8 @@ export const defaultConfig: BlipConfig = {
         scale: MAJOR_PENTATONIC,
         octaves: 2,
         mapping: 'wrap'
-      }
+      },
+      spatial: { placement: { kind: 'fixed', at: 0 } }
     }
   }
 }
