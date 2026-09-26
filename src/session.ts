@@ -65,7 +65,6 @@ export const voicingOf = (session: Session, kind: StreamKind): Voicing => ({
 
 /** The device this session asks for. Nothing enabled means no process at all. */
 export const deviceOf = (session: Session): Device => ({
-  backend: session.settings.config.backend,
   muted: silent(session)
 })
 
@@ -77,14 +76,9 @@ const status = (session: Session): string =>
       .exhaustive()
   ).join(', ')
 
-const summary = ({
-  config,
-  preset,
-  sources,
-  problems
-}: LoadedSettings): string =>
+const summary = ({ preset, sources, problems }: LoadedSettings): string =>
   [
-    `preset ${preset}, ${config.backend}, ${match(sources)
+    `preset ${preset}, ${match(sources)
       .with([], () => 'defaults')
       .otherwise((found) => found.join(', '))}`,
     ...problems

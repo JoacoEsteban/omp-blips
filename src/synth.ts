@@ -4,8 +4,6 @@ import { sansProfile } from './vocal-profile.ts'
 
 export const SAMPLE_RATE = 44_100
 
-const BITS_PER_SAMPLE = 16
-const CHANNELS = 1
 const PEAK = 0x7fff
 const NYQUIST = SAMPLE_RATE / 2
 const SOUND_VERSION = 'formant-v6'
@@ -359,29 +357,3 @@ export const voice = (sound: Sound): Float32Array => {
 
 export const toInt16 = (sample: number): number =>
   Math.round(Math.max(-1, Math.min(1, sample)) * PEAK)
-
-const wavHeader = (dataBytes: number): Buffer => {
-  const header = Buffer.alloc(44)
-  const byteRate = (SAMPLE_RATE * CHANNELS * BITS_PER_SAMPLE) / 8
-  header.write('RIFF', 0, 'ascii')
-  header.writeUInt32LE(36 + dataBytes, 4)
-  header.write('WAVE', 8, 'ascii')
-  header.write('fmt ', 12, 'ascii')
-  header.writeUInt32LE(16, 16)
-  header.writeUInt16LE(1, 20)
-  header.writeUInt16LE(CHANNELS, 22)
-  header.writeUInt32LE(SAMPLE_RATE, 24)
-  header.writeUInt32LE(byteRate, 28)
-  header.writeUInt16LE((CHANNELS * BITS_PER_SAMPLE) / 8, 32)
-  header.writeUInt16LE(BITS_PER_SAMPLE, 34)
-  header.write('data', 36, 'ascii')
-  header.writeUInt32LE(dataBytes, 40)
-  return header
-}
-
-export const encodeWav = (samples: Float32Array): Buffer => {
-  const data = Buffer.alloc(samples.length * 2)
-  for (let i = 0; i < samples.length; i += 1)
-    data.writeInt16LE(toInt16(samples[i] ?? 0), i * 2)
-  return Buffer.concat([wavHeader(data.length), data])
-}

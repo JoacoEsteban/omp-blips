@@ -1,6 +1,5 @@
 {
   "preset": "default",
-  "backend": "ffplay",
   "tickHz": 20,
   "voices": {
     "text": {

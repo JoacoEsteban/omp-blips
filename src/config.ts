@@ -4,13 +4,6 @@ import type { PitchConfig } from './pitch.ts'
 import type { ReadingConfig } from './reading.ts'
 import type { Material, Touch } from './synth.ts'
 
-/**
- * Playback backend.
- * - `afplay`: macOS built-in, one process per tone, ~50 ms spawn latency.
- * - `ffplay`: long-lived PCM sink, near-zero latency and real mixing, needs ffmpeg.
- */
-export type BackendName = 'afplay' | 'ffplay'
-
 /** Which part of the assistant stream a blip came from. */
 export type StreamKind = 'text' | 'thinking' | 'tool'
 
@@ -62,8 +55,6 @@ export interface BlipConfig {
    * provider happens to deliver its deltas.
    */
   readonly tickHz: number
-  /** Which playback backend to use. */
-  readonly backend: BackendName
   readonly voices: Record<StreamKind, VoiceConfig>
 }
 
@@ -75,14 +66,12 @@ export type VoicePatch = {
 /** A partial config: presets and config files are both this shape. */
 export interface ConfigPatch {
   readonly tickHz?: number | undefined
-  readonly backend?: BackendName | undefined
   readonly voices?:
     { readonly [K in StreamKind]?: VoicePatch | undefined } | undefined
 }
 
 export const defaultConfig: BlipConfig = {
   tickHz: 20,
-  backend: 'ffplay',
   voices: {
     // Prose: mid register, the voice the ear tracks. Every other tick, so it
     // sits at half the grid and the other two read against it.

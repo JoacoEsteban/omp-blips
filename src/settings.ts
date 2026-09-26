@@ -81,7 +81,6 @@ const settingsSchema = z
   .object({
     preset: z.enum(PRESET_NAMES),
     tickHz: z.number().positive(),
-    backend: z.enum(['afplay', 'ffplay']),
     voices: z
       .object({ text: voiceSchema, thinking: voiceSchema, tool: voiceSchema })
       .partial()
@@ -158,7 +157,6 @@ export const applyPatch = (
   patch: ConfigPatch
 ): BlipConfig => ({
   tickHz: patch.tickHz ?? base.tickHz,
-  backend: patch.backend ?? base.backend,
   voices: {
     text: mergeVoice(base.voices.text, patch.voices?.text),
     thinking: mergeVoice(base.voices.thinking, patch.voices?.thinking),

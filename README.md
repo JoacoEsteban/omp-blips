@@ -43,8 +43,8 @@ The modal synthesizer combines several resonant modes for each material. It adds
 The dedicated `vocal` material uses measured harmonic phase and amplitude controls across up to 10,000
 harmonics. Its procedural contour adds intrinsic rising pitch and cycle motion.
 
-The synthesizer renders each sound as mono PCM at runtime. It keeps rendered sounds in memory. The `afplay`
-backend also writes each sound to a WAV file cache. No sampled audio asset or Python runtime is required.
+The synthesizer renders each sound as mono PCM at runtime. It keeps rendered sounds in memory.
+No sampled audio asset or Python runtime is required.
 
 ## Streams
 
@@ -70,8 +70,8 @@ head of the block it is writing, so a period off its own grid would place tones 
 late at random. That is invisible on a screen and audible in a beat.
 Auditions use the same rounded period for character arrival and the playback deadline.
 
-`src/player.ts` maps the session to one device. A different backend, or a mute of all three voices,
-closes the process that runs. The next state opens the device that it asks for.
+`src/player.ts` maps the session to one device. A mute of all three voices closes the process.
+The next unmuted state opens a new process.
 
 `src/players/mixer.ts` is the mix as a fold. Play, flush, and clock events go in, and blocks of PCM
 come out. The state is a value, so the same events always give the same audio.
@@ -143,8 +143,6 @@ material can clip.
 
 The cache key includes the exact frequency, duration, decay, swell, hold, glide, colour, material,
 touch, and a sound version. Volume is applied during playback, so it is not part of the key.
-
-Old cache files remain in `$TMPDIR/omp-blips`. New sound keys prevent reuse of old fixed-synth files.
 
 The `tickHz` option sets the grid the whole extension sounds on, and the `divisor` of a voice
 picks how many of those ticks one of its blips costs. A voice at `divisor: 2` on a 20 Hz grid
@@ -347,14 +345,10 @@ result, the melody makes large jumps and sounds mechanical.
 together in the alphabet always get two positions that are together in the scale. As a result, the
 melody moves in small steps and sounds more like a song.
 
-## Backends
+## Playback
 
-A backend sends the tones to the audio device. The option `backend` selects one of two backends.
-
-### ffplay
-
-`ffplay` is the default backend. The code is in `src/players/ffplay.ts`. This backend needs an
-installation of `ffmpeg`.
+The extension uses `ffplay`. The code is in `src/players/ffplay.ts`. Install `ffmpeg` before you
+install the extension.
 
 The extension starts one `ffplay` process and keeps it. The process reads raw PCM audio from its
 standard input. A mixer writes new audio each 10 ms and stays 40 ms in front of the clock.
@@ -372,22 +366,11 @@ After 20 s without a blip, the extension stops the process. The next blip starts
 A stop decreases the sound to zero in 6 ms. A tone that stops in one step makes a click. Up to 40 ms
 of audio is already in the pipe and stays there, so the silence starts a moment after the stop.
 
-### afplay
-
-`afplay` is part of macOS. The code is in `src/players/afplay.ts`. This backend needs no
-installation.
-
-The extension starts one short process for each blip. It plays a WAV file from the cache directory
-`$TMPDIR/omp-blips`. A new process needs approximately 50 ms before the sound starts. A maximum of
-6 processes can play at the same time.
-
-A stop kills the processes that play. `afplay` gives no control of the volume during play, so the
-sound stops in one step.
-
 ## Install
 
-1. Run `mise run link`. This command makes a symbolic link in `~/.omp/agent/extensions/omp-blips`.
-2. Start `omp` again. The extension loads at the start of a session.
+1. Install `ffmpeg`.
+2. Run `mise run link`. This command makes a symbolic link in `~/.omp/agent/extensions/omp-blips`.
+3. Start `omp` again. The extension loads at the start of a session.
 
 To remove the symbolic link, run `mise run unlink`.
 
@@ -424,7 +407,6 @@ preset, then the first file, then the second file. A file gives only the keys th
 ```json
 {
   "preset": "gamelan",
-  "backend": "ffplay",
   "tickHz": 20,
   "voices": {
     "thinking": {
@@ -441,11 +423,10 @@ preset, then the first file, then the second file. A file gives only the keys th
 
 ### Keys
 
-| Key       | Type                     | Function                                                          |
-| --------- | ------------------------ | ----------------------------------------------------------------- |
-| `backend` | `"ffplay"` or `"afplay"` | The backend that plays the tones.                                 |
-| `preset`  | a preset name            | The preset that gives the start values.                           |
-| `tickHz`  | positive number          | The shared grid, in ticks per second, that every voice sounds on. |
+| Key      | Type            | Function                                                          |
+| -------- | --------------- | ----------------------------------------------------------------- |
+| `preset` | a preset name   | The preset that gives the start values.                           |
+| `tickHz` | positive number | The shared grid, in ticks per second, that every voice sounds on. |
 
 Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts these keys:
 
@@ -523,5 +504,4 @@ hear. The lab reads the same configuration files as the extension.
 
 ## Platform
 
-The extension operates on macOS only. `afplay` is part of macOS. `ffplay` uses the default audio
-output of the system.
+The extension uses `ffplay` and the default audio output of the system.

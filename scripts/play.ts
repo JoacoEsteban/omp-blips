@@ -23,7 +23,7 @@ export const characters = (text: string, delayMs: number): Observable<string> =>
   from(text).pipe(concatMap((char) => timer(delayMs).pipe(map(() => char))))
 
 /**
- * Feed a phrase through the same pitch path and backend the extension uses.
+ * Feed a phrase through the same pitch and playback path as the extension.
  * The observable is the whole run: subscribing starts it, unsubscribing stops
  * it, and it completes once the last tone has rung out.
  */
@@ -59,5 +59,5 @@ export const playText = (
       timer(voice.toneMs * TAIL).pipe(ignoreElements())
     )
 
-    return playback(of({ backend: config.backend, muted: false }), commands)
+    return playback(of({ muted: false }), commands)
   })
