@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { defaultConfig } from './config.ts'
 import { loadSettings } from './settings.ts'
 import type { SpatialConfig } from './spatial.ts'
 
@@ -42,17 +41,13 @@ const INVALID_SPATIAL = [
 
 for (const { name, spatial } of INVALID_SPATIAL)
   test(`invalid spatial ${name} is rejected without partial application`, () => {
+    const baseline = withConfig({}, (cwd) => loadSettings(cwd).config)
     const settings = withConfig(
       { voices: { text: { spatial, volume: 0.1 } } },
       (cwd) => loadSettings(cwd)
     )
     expect(settings.problems.length).toBeGreaterThan(0)
-    expect(settings.config.voices.text.spatial).toEqual(
-      defaultConfig.voices.text.spatial
-    )
-    expect(settings.config.voices.text.volume).toBe(
-      defaultConfig.voices.text.volume
-    )
+    expect(settings.config).toEqual(baseline)
   })
 
 test('valid nested spatial configuration is loaded', () => {

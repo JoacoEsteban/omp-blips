@@ -13,6 +13,13 @@ export const sansPreset: Preset = {
     tickHz: 15.2,
     voices: {
       text: {
+        spatial: {
+          placement: {
+            kind: 'characters',
+            groups: [{ chars: 'aeiouAEIOU', at: -0.12 }],
+            otherwise: 0.08
+          }
+        },
         divisor: 1,
         stride: 1,
         toneMs: 140,
@@ -29,6 +36,15 @@ export const sansPreset: Preset = {
         pitch: { kind: 'drone' }
       },
       thinking: {
+        spatial: {
+          placement: { kind: 'fixed', at: -0.25 },
+          motion: {
+            kind: 'oscillate',
+            clock: 'voice',
+            depth: 0.07,
+            periodMs: 8000
+          }
+        },
         divisor: 1,
         stride: 2,
         toneMs: 140,
@@ -48,6 +64,7 @@ export const sansPreset: Preset = {
       // Not speech: a dry knock under the voice, and the one struck sound in
       // the preset.
       tool: {
+        spatial: { placement: { kind: 'fixed', at: 0.5 } },
         divisor: 1,
         stride: 3,
         toneMs: 28,

@@ -317,7 +317,9 @@ A half `scalar` pitch and a half `drone` pitch is not a voice.
 ## Spatial placement
 
 Each voice has a `spatial` object. Presets and configuration files can choose different placement and motion for each voice.
-Existing presets stay centered, with no motion. A file replaces the full `spatial` object rather than merging its parts.
+Each preset supplies spatial placement for all three voices, including voices that are disabled.
+A file replaces the full `spatial` object rather than merging its parts.
+To center a voice without motion, set its `spatial` to `{ "placement": { "kind": "fixed", "at": 0 } }`.
 
 Positions range from `-1` (left only) through `0` (center) to `1` (right only).
 Mono sounds use equal-power panning. Placement does not change their pitch or material.
@@ -352,6 +354,28 @@ This example sends vowels left, digits right, and other sounded characters to th
   }
 }
 ```
+
+### Preset spatial character
+
+| Preset       | Spatial character                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `default`    | A compact stage: vowels just left of center, reasoning further left, and tool ticks in two positions on the right.                   |
+| `arcade`     | Text jumps through four positions. Reasoning alternates in a narrower range, while tool ticks jump near the edges.                   |
+| `gamelan`    | Four text positions suggest separate instruments. Low tones drift slowly beneath them, and ceramic tool strikes alternate widely.    |
+| `sonar`      | Text and reasoning sweep on separate 9- and 13-second cycles. Each tool ping travels from left toward right.                         |
+| `typewriter` | Text follows the left and right halves of a QWERTY keyboard. Opening and closing tool brackets occupy opposite sides.                |
+| `music-box`  | Text walks eight positions from left to right and back. Reasoning moves gently, with bright tool notes on opposite sides.            |
+| `quiet`      | An 18-second drift stays close to the center. Reasoning sits slightly left. The tool voice remains disabled.                         |
+| `haiku`      | Text and reasoning follow different slow sweeps. Quiet tool tones alternate widely and move slightly during each note.               |
+| `pulse`      | Text alternates narrowly around a centered reasoning voice. Tool accents alternate further out.                                      |
+| `plainchant` | Text vowels form three groups: `a/e` left, `i` center, and `o/u` right. Reasoning moves slightly on the left. Tools remain disabled. |
+| `cipher`     | Letters `a–m` sit left and `n–z` right. Reasoning reverses that mapping. Tool digits separate from letters.                          |
+| `telegraph`  | Text and reasoning occupy fixed positions on opposite sides. Tool ticks alternate near the edges. No continuous motion.              |
+| `hexdump`    | Tool opening brackets sit fully left and closing brackets fully right. Quotes and separators sit nearer the center.                  |
+| `sans`       | Text vowels and other characters sit just either side of center. Reasoning drifts slightly left, with dry tool knocks on the right.  |
+
+These choices change position, not pitch, timbre, gain, or cadence. Character groups include uppercase letters where applicable.
+Continuous motion stays slow for sustained presets. Short rhythmic presets use discrete positions instead.
 
 ### Motion
 

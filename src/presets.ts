@@ -41,7 +41,36 @@ export interface Preset {
 export const presets: Record<PresetName, Preset> = {
   default: {
     description: 'Prose melody, dark reasoning murmur, bright tool ticks.',
-    patch: {}
+    patch: {
+      voices: {
+        text: {
+          spatial: {
+            placement: {
+              kind: 'characters',
+              groups: [
+                { chars: 'aeiouAEIOU', at: -0.12 },
+                { chars: '0123456789', at: 0.18 }
+              ],
+              otherwise: 0
+            }
+          }
+        },
+        thinking: {
+          spatial: {
+            placement: { kind: 'fixed', at: -0.25 },
+            motion: {
+              kind: 'oscillate',
+              clock: 'voice',
+              depth: 0.08,
+              periodMs: 12000
+            }
+          }
+        },
+        tool: {
+          spatial: { placement: { kind: 'alternate', positions: [0.25, 0.4] } }
+        }
+      }
+    }
   },
 
   // Bright modal tones with small intervals and a fast rate. The 2-character
@@ -53,6 +82,12 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 22.2,
       voices: {
         text: {
+          spatial: {
+            placement: {
+              kind: 'alternate',
+              positions: [-0.65, 0.2, 0.65, -0.2]
+            }
+          },
           divisor: 1,
           stride: 2,
           toneMs: 34,
@@ -69,6 +104,9 @@ export const presets: Record<PresetName, Preset> = {
           }
         },
         thinking: {
+          spatial: {
+            placement: { kind: 'alternate', positions: [0.35, -0.35] }
+          },
           divisor: 1,
           stride: 3,
           toneMs: 40,
@@ -80,6 +118,9 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'scalar', scale: BLUES, octaves: 2, mapping: 'wrap' }
         },
         tool: {
+          spatial: {
+            placement: { kind: 'alternate', positions: [-0.85, 0.85] }
+          },
           divisor: 1,
           stride: 4,
           toneMs: 18,
@@ -105,6 +146,12 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 6.7,
       voices: {
         text: {
+          spatial: {
+            placement: {
+              kind: 'alternate',
+              positions: [-0.6, 0.15, 0.6, -0.15]
+            }
+          },
           divisor: 1,
           stride: 10,
           toneMs: 260,
@@ -123,6 +170,15 @@ export const presets: Record<PresetName, Preset> = {
           }
         },
         thinking: {
+          spatial: {
+            placement: { kind: 'fixed', at: -0.15 },
+            motion: {
+              kind: 'oscillate',
+              clock: 'voice',
+              depth: 0.35,
+              periodMs: 7000
+            }
+          },
           divisor: 1,
           stride: 4,
           toneMs: 420,
@@ -134,6 +190,9 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
         },
         tool: {
+          spatial: {
+            placement: { kind: 'alternate', positions: [-0.75, 0.75] }
+          },
           divisor: 1,
           stride: 10,
           toneMs: 130,
@@ -157,6 +216,15 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 2.4,
       voices: {
         text: {
+          spatial: {
+            placement: { kind: 'fixed', at: 0 },
+            motion: {
+              kind: 'oscillate',
+              clock: 'voice',
+              depth: 0.8,
+              periodMs: 9000
+            }
+          },
           divisor: 1,
           stride: 5,
           toneMs: 680,
@@ -171,6 +239,15 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'drone' }
         },
         thinking: {
+          spatial: {
+            placement: { kind: 'fixed', at: 0 },
+            motion: {
+              kind: 'oscillate',
+              clock: 'voice',
+              depth: 0.55,
+              periodMs: 13000
+            }
+          },
           divisor: 1,
           stride: 6,
           toneMs: 840,
@@ -183,6 +260,15 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'drone' }
         },
         tool: {
+          spatial: {
+            placement: { kind: 'fixed', at: -0.3 },
+            motion: {
+              kind: 'oscillate',
+              clock: 'tone',
+              depth: 0.6,
+              periodMs: 1600
+            }
+          },
           divisor: 1,
           stride: 6,
           toneMs: 520,
@@ -206,6 +292,16 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 23.8,
       voices: {
         text: {
+          spatial: {
+            placement: {
+              kind: 'characters',
+              groups: [
+                { chars: 'qwertasdfgzxcvbQWERTASDFGZXCVB12345', at: -0.4 },
+                { chars: 'yuiophjklnmYUIOPHJKLNM67890', at: 0.4 }
+              ],
+              otherwise: 0
+            }
+          },
           divisor: 1,
           stride: 2,
           toneMs: 20,
@@ -219,6 +315,7 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'chromatic', span: 2 }
         },
         thinking: {
+          spatial: { placement: { kind: 'fixed', at: -0.3 } },
           divisor: 1,
           stride: 3,
           toneMs: 24,
@@ -230,6 +327,16 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'chromatic', span: 2 }
         },
         tool: {
+          spatial: {
+            placement: {
+              kind: 'characters',
+              groups: [
+                { chars: '{[(', at: -0.55 },
+                { chars: '}])', at: 0.55 }
+              ],
+              otherwise: 0.15
+            }
+          },
           divisor: 1,
           stride: 3,
           toneMs: 16,
@@ -251,6 +358,12 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 10.5,
       voices: {
         text: {
+          spatial: {
+            placement: {
+              kind: 'alternate',
+              positions: [-0.5, -0.25, 0, 0.25, 0.5, 0.25, 0, -0.25]
+            }
+          },
           divisor: 1,
           stride: 3,
           toneMs: 150,
@@ -264,6 +377,15 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
         },
         thinking: {
+          spatial: {
+            placement: { kind: 'fixed', at: 0.15 },
+            motion: {
+              kind: 'oscillate',
+              clock: 'voice',
+              depth: 0.2,
+              periodMs: 6000
+            }
+          },
           divisor: 1,
           stride: 4,
           toneMs: 210,
@@ -275,6 +397,7 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
         },
         tool: {
+          spatial: { placement: { kind: 'alternate', positions: [0.6, -0.6] } },
           divisor: 1,
           stride: 8,
           toneMs: 90,
@@ -303,6 +426,15 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 5.3,
       voices: {
         text: {
+          spatial: {
+            placement: { kind: 'fixed', at: 0 },
+            motion: {
+              kind: 'oscillate',
+              clock: 'voice',
+              depth: 0.12,
+              periodMs: 18000
+            }
+          },
           divisor: 1,
           stride: 3,
           toneMs: 70,
@@ -320,6 +452,7 @@ export const presets: Record<PresetName, Preset> = {
           }
         },
         thinking: {
+          spatial: { placement: { kind: 'fixed', at: -0.15 } },
           divisor: 1,
           stride: 4,
           toneMs: 110,
@@ -335,6 +468,7 @@ export const presets: Record<PresetName, Preset> = {
           }
         },
         tool: {
+          spatial: { placement: { kind: 'fixed', at: 0.15 } },
           enabled: false,
           divisor: 1,
           stride: 8,
@@ -354,6 +488,15 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 16.7,
       voices: {
         text: {
+          spatial: {
+            placement: { kind: 'fixed', at: -0.15 },
+            motion: {
+              kind: 'oscillate',
+              clock: 'voice',
+              depth: 0.4,
+              periodMs: 11000
+            }
+          },
           divisor: 1,
           stride: 3,
           toneMs: 520,
@@ -373,6 +516,15 @@ export const presets: Record<PresetName, Preset> = {
           }
         },
         thinking: {
+          spatial: {
+            placement: { kind: 'fixed', at: 0.2 },
+            motion: {
+              kind: 'oscillate',
+              clock: 'voice',
+              depth: 0.35,
+              periodMs: 17000
+            }
+          },
           divisor: 1,
           stride: 4,
           toneMs: 700,
@@ -392,6 +544,15 @@ export const presets: Record<PresetName, Preset> = {
           }
         },
         tool: {
+          spatial: {
+            placement: { kind: 'alternate', positions: [-0.65, 0.65] },
+            motion: {
+              kind: 'oscillate',
+              clock: 'tone',
+              depth: 0.12,
+              periodMs: 2800
+            }
+          },
           divisor: 1,
           stride: 4,
           toneMs: 700,
@@ -426,6 +587,7 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 20,
       voices: {
         text: {
+          spatial: { placement: { kind: 'alternate', positions: [-0.2, 0.2] } },
           divisor: 1,
           stride: 6,
           toneMs: 90,
@@ -439,6 +601,7 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'drone' }
         },
         thinking: {
+          spatial: { placement: { kind: 'fixed', at: 0 } },
           divisor: 1,
           stride: 4,
           toneMs: 130,
@@ -451,6 +614,9 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'drone' }
         },
         tool: {
+          spatial: {
+            placement: { kind: 'alternate', positions: [-0.55, 0.55] }
+          },
           divisor: 1,
           stride: 6,
           toneMs: 22,
@@ -474,6 +640,16 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 4.5,
       voices: {
         text: {
+          spatial: {
+            placement: {
+              kind: 'characters',
+              groups: [
+                { chars: 'aeAE', at: -0.35 },
+                { chars: 'ouOU', at: 0.35 }
+              ],
+              otherwise: 0
+            }
+          },
           divisor: 1,
           stride: 2,
           toneMs: 620,
@@ -491,6 +667,15 @@ export const presets: Record<PresetName, Preset> = {
           }
         },
         thinking: {
+          spatial: {
+            placement: { kind: 'fixed', at: -0.2 },
+            motion: {
+              kind: 'oscillate',
+              clock: 'voice',
+              depth: 0.08,
+              periodMs: 14000
+            }
+          },
           divisor: 1,
           stride: 3,
           toneMs: 780,
@@ -509,6 +694,7 @@ export const presets: Record<PresetName, Preset> = {
         },
         // A chant does not tick through JSON.
         tool: {
+          spatial: { placement: { kind: 'fixed', at: 0.3 } },
           enabled: false,
           divisor: 1,
           stride: 8,
@@ -528,6 +714,16 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 27.8,
       voices: {
         text: {
+          spatial: {
+            placement: {
+              kind: 'characters',
+              groups: [
+                { chars: 'abcdefghijklmABCDEFGHIJKLM', at: -0.7 },
+                { chars: 'nopqrstuvwxyzNOPQRSTUVWXYZ', at: 0.7 }
+              ],
+              otherwise: 0
+            }
+          },
           divisor: 1,
           stride: 1,
           toneMs: 40,
@@ -539,6 +735,16 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'chromatic', span: 26 }
         },
         thinking: {
+          spatial: {
+            placement: {
+              kind: 'characters',
+              groups: [
+                { chars: 'abcdefghijklmABCDEFGHIJKLM', at: 0.4 },
+                { chars: 'nopqrstuvwxyzNOPQRSTUVWXYZ', at: -0.4 }
+              ],
+              otherwise: 0
+            }
+          },
           divisor: 1,
           stride: 2,
           toneMs: 60,
@@ -550,6 +756,13 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'chromatic', span: 26 }
         },
         tool: {
+          spatial: {
+            placement: {
+              kind: 'characters',
+              groups: [{ chars: '0123456789', at: -0.65 }],
+              otherwise: 0.4
+            }
+          },
           divisor: 1,
           stride: 4,
           toneMs: 20,
@@ -573,6 +786,7 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 35.7,
       voices: {
         text: {
+          spatial: { placement: { kind: 'fixed', at: -0.45 } },
           divisor: 1,
           stride: 1,
           toneMs: 14,
@@ -585,6 +799,7 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'drone' }
         },
         thinking: {
+          spatial: { placement: { kind: 'fixed', at: 0.45 } },
           divisor: 1,
           stride: 2,
           toneMs: 18,
@@ -597,6 +812,9 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'drone' }
         },
         tool: {
+          spatial: {
+            placement: { kind: 'alternate', positions: [-0.85, 0.85] }
+          },
           divisor: 1,
           stride: 2,
           toneMs: 10,
@@ -621,6 +839,16 @@ export const presets: Record<PresetName, Preset> = {
       tickHz: 33.3,
       voices: {
         text: {
+          spatial: {
+            placement: {
+              kind: 'characters',
+              groups: [
+                { chars: '0123456789', at: 0.45 },
+                { chars: '{}[]():,;"', at: -0.45 }
+              ],
+              otherwise: 0
+            }
+          },
           divisor: 1,
           stride: 2,
           toneMs: 26,
@@ -632,6 +860,9 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'chromatic', span: 12 }
         },
         thinking: {
+          spatial: {
+            placement: { kind: 'alternate', positions: [-0.25, 0.25] }
+          },
           divisor: 1,
           stride: 3,
           toneMs: 34,
@@ -643,6 +874,18 @@ export const presets: Record<PresetName, Preset> = {
           pitch: { kind: 'chromatic', span: 12 }
         },
         tool: {
+          spatial: {
+            placement: {
+              kind: 'characters',
+              groups: [
+                { chars: '{[(', at: -1 },
+                { chars: '}])', at: 1 },
+                { chars: '"', at: -0.3 },
+                { chars: ':,;', at: 0.3 }
+              ],
+              otherwise: 0
+            }
+          },
           divisor: 1,
           stride: 1,
           toneMs: 16,
