@@ -184,10 +184,11 @@ profile: `src/preset-sans.ts`. The default preset has the name `default`.
 | `plainchant` | Vowels only, held, in one octave. The text sings its spine.                         | `vowels`    |
 | `cipher`     | One semitone for each letter. You hear a word as it is spelled.                     | `chromatic` |
 | `telegraph`  | A wire. Each character is one tick, and only the spaces speak.                      | `class`     |
+| `geiger`     | One tick for each character, at the fastest rate the audio path allows.             | `class`     |
 | `hexdump`    | Raw bytes. Punctuation sounds, and the tool calls lead.                             | `codepoint` |
 | `sans`       | A rising vocal blip. Rounded low tones, one for each character.                     | `vocal`     |
 
-The six presets after `quiet` each show one reading or one pitch with nothing in its way:
+The seven presets after `quiet` each show one reading or one pitch with nothing in its way:
 
 - `haiku` gives `phrase` long tones on a slow grid, so no word is lost.
 - `pulse` puts `phrase` against `drone`. The reading keeps the words and the pitch drops the
@@ -197,6 +198,12 @@ The six presets after `quiet` each show one reading or one pitch with nothing in
   the alphabet and there is no scale, so `a` is always the same note.
 - `telegraph` puts `class` against `drone` at a stride of one character. Only whitespace is
   silent, so the words show as gaps.
+- `geiger` is `telegraph` taken to the limit of the audio path. Its grid runs at 100 ticks a
+  second and every voice takes every grapheme. The mixer writes in 10 millisecond blocks, so
+  100 Hz is one tone for each block and the highest rate the grid can hold: above it two tones
+  share a block and one is lost. Each tone is shorter than the period, which keeps it a tick and
+  not a drone. Deltas do not arrive evenly, so a burst at the grid rate already outruns it: at 50
+  characters a second every voiced grapheme sounds, and at 100 about two in three do.
 - `hexdump` reads the tool arguments character by character. It is the one preset in which the
   tool voice leads.
 
@@ -377,6 +384,7 @@ This example sends vowels left, digits right, and other sounded characters to th
 | `plainchant` | Text vowels form three groups: `a/e` left, `i` center, and `o/u` right. Reasoning moves slightly on the left. Tools remain disabled. |
 | `cipher`     | Letters `a–m` sit left and `n–z` right. Reasoning reverses that mapping. Tool digits separate from letters.                          |
 | `telegraph`  | Text and reasoning occupy fixed positions on opposite sides. Tool ticks alternate near the edges. No continuous motion.              |
+| `geiger`     | Text sits slightly left and reasoning slightly right, both fixed. Tool ticks alternate wide. No motion at this rate.                 |
 | `hexdump`    | Tool opening brackets sit fully left and closing brackets fully right. Quotes and separators sit nearer the center.                  |
 | `sans`       | Text vowels and other characters sit just either side of center. Reasoning drifts slightly left, with dry tool knocks on the right.  |
 

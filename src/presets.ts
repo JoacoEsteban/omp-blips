@@ -21,6 +21,7 @@ export const PRESET_NAMES = [
   'plainchant',
   'cipher',
   'telegraph',
+  'geiger',
   'hexdump',
   'sans'
 ] as const
@@ -825,6 +826,67 @@ export const presets: Record<PresetName, Preset> = {
           baseFrequency: 880,
           reading: { kind: 'class' },
           pitch: { kind: 'drone' }
+        }
+      }
+    }
+  },
+
+  // The fastest reading the audio path allows. The mixer writes in 10 ms
+  // blocks, so 100 Hz is one tone per block and the hard ceiling of the grid:
+  // above it two tones would land in the same block and one would be lost.
+  // Every voice takes every grapheme at that rate, so a stream arriving under
+  // the grid is heard grapheme by grapheme. Deltas do not arrive evenly, so a
+  // burst at the grid rate already outruns it and the catch-up stride starts
+  // skipping: at 50 characters a second every voiced grapheme sounds, at 100
+  // about two in three do.
+  // Tones are shorter than the period, so each one is a tick and not a drone.
+  geiger: {
+    description: 'One tick for each character, as fast as the grid goes.',
+    patch: {
+      tickHz: 100,
+      voices: {
+        text: {
+          spatial: { placement: { kind: 'fixed', at: -0.2 } },
+          divisor: 1,
+          stride: 1,
+          toneMs: 6,
+          decay: 2.4,
+          volume: 0.45,
+          material: 'stone',
+          touch: 'firm',
+          baseFrequency: 1046.5,
+          // Four classes, four semitones: vowels, consonants, digits and
+          // punctuation are told apart without the tick becoming a melody.
+          reading: { kind: 'class' },
+          pitch: { kind: 'chromatic', span: 4 }
+        },
+        thinking: {
+          spatial: { placement: { kind: 'fixed', at: 0.25 } },
+          divisor: 1,
+          stride: 1,
+          toneMs: 7,
+          decay: 2.2,
+          volume: 0.4,
+          material: 'wood',
+          touch: 'firm',
+          baseFrequency: 523.25,
+          reading: { kind: 'class' },
+          pitch: { kind: 'chromatic', span: 4 }
+        },
+        tool: {
+          spatial: {
+            placement: { kind: 'alternate', positions: [-0.75, 0.75] }
+          },
+          divisor: 1,
+          stride: 1,
+          toneMs: 5,
+          decay: 2.6,
+          volume: 0.3,
+          material: 'glass',
+          touch: 'firm',
+          baseFrequency: 1567.98,
+          reading: { kind: 'class' },
+          pitch: { kind: 'chromatic', span: 4 }
         }
       }
     }
