@@ -202,7 +202,7 @@ export default function blips(pi: ExtensionAPI): void {
       (kind) => session.pipe(map((current) => voicingOf(current, kind))),
       restart,
       ticks
-    ).pipe(map(({ tone }) => play(tone))),
+    ).pipe(map(({ tone, at }) => play(tone, at))),
     silenced.pipe(map(() => flush())),
     tuner.audition
   ).pipe(takeUntil(io.shutdown))

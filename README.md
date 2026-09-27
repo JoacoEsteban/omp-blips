@@ -28,7 +28,9 @@ the grid: a delta only adds to a buffer, and the grid reads that buffer.
 The `stride` option of a voice is the sampling interval in the text. It is the number of
 characters the reading walks for one blip, and the blip takes the last number that walk produced.
 When the model writes faster than the grid reads, the stride widens and stays wide until the buffer is empty.
-A burst drains within eight ticks assigned to that voice, unless the message ends first and discards the unread text.
+The `catchup` option of a voice is how many of its ticks a backlog may take to cross, eight by
+default. A voice that must sound every character raises it, and trails the text for longer to do
+so; a voice that must stay in step lowers it, and spends resolution instead.
 New text can widen the stride further. The tempo does not change. Each blip stands for more text.
 
 The default reading is `alphabet`: `a` is 0, `z` is 25, and the digits continue above the letters.
@@ -67,10 +69,12 @@ keeps its own cursor into its own text. A delta only appends to that text. The s
 timer, and every tick of it is a chance for a cursor to walk its stride and make a tone.
 Message boundaries reset the cursors, not the grid. The clock keeps its phase between messages.
 
-The period of the grid is rounded to a whole number of mixer ticks. The mixer starts a tone at the
-head of the block it is writing, so a period off its own grid would place tones a tick early or
-late at random. That is invisible on a screen and audible in a beat.
-Auditions use the same rounded period for character arrival and the playback deadline.
+The grid period is exact: `1000 / tickHz`, with a floor of 2 milliseconds. Each tick is scheduled
+against the moment it is due, not against the moment the last one fired, so a late wake-up costs
+that tick alone. `setInterval` does the opposite, and at a 10 millisecond period it drifts a
+quarter of a second away within 300 ticks. The due moment travels with the tick and then with the
+blip, so the mixer starts the tone at the sample the grid meant, whatever millisecond the timer
+woke up on. Auditions use the same period for character arrival and the playback deadline.
 
 `src/player.ts` maps the session to one device. A mute of all three voices closes the process.
 The next unmuted state opens a new process.
@@ -184,7 +188,7 @@ profile: `src/preset-sans.ts`. The default preset has the name `default`.
 | `plainchant` | Vowels only, held, in one octave. The text sings its spine.                         | `vowels`    |
 | `cipher`     | One semitone for each letter. You hear a word as it is spelled.                     | `chromatic` |
 | `telegraph`  | A wire. Each character is one tick, and only the spaces speak.                      | `class`     |
-| `geiger`     | One tick for each character, at the fastest rate the audio path allows.             | `class`     |
+| `geiger`     | One tick for each character, at any speed the text arrives.                         | `class`     |
 | `hexdump`    | Raw bytes. Punctuation sounds, and the tool calls lead.                             | `codepoint` |
 | `sans`       | A rising vocal blip. Rounded low tones, one for each character.                     | `vocal`     |
 
@@ -198,12 +202,14 @@ The seven presets after `quiet` each show one reading or one pitch with nothing 
   the alphabet and there is no scale, so `a` is always the same note.
 - `telegraph` puts `class` against `drone` at a stride of one character. Only whitespace is
   silent, so the words show as gaps.
-- `geiger` is `telegraph` taken to the limit of the audio path. Its grid runs at 100 ticks a
-  second and every voice takes every grapheme. The mixer writes in 10 millisecond blocks, so
-  100 Hz is one tone for each block and the highest rate the grid can hold: above it two tones
-  share a block and one is lost. Each tone is shorter than the period, which keeps it a tick and
-  not a drone. Deltas do not arrive evenly, so a burst at the grid rate already outruns it: at 50
-  characters a second every voiced grapheme sounds, and at 100 about two in three do.
+- `geiger` is `telegraph` with nothing held back. Its grid runs at 250 ticks a second, which is
+  faster than a provider streams, and each voice takes every grapheme with a `catchup` of 32 so
+  the stride never widens through a burst. At 250 characters a second it sounds 209 blips a
+  second, which is every character that is not whitespace. Its tones last 8 to 12 milliseconds,
+  which is longer than the 4 millisecond period, so they overlap. That is deliberate: the modal
+  renderer builds its resonances across the length of a tone, so a tone as short as the period is
+  some thirty times quieter than a normal one and the whole preset disappears. Every voice is
+  struck `firm` for the same reason, because a `soft` attack alone takes 8 milliseconds.
 - `hexdump` reads the tool arguments character by character. It is the one preset in which the
   tool voice leads.
 
@@ -457,8 +463,15 @@ install the extension.
 The extension starts one `ffplay` process and keeps it. The process reads interleaved 16-bit stereo PCM at 44.1 kHz.
 A mixer writes new audio each 10 ms and stays 40 ms in front of the clock.
 
-This design has two results. A tone starts at the next mixer step and does not wait for a new
-process. Two tones that occur together become one mixed sound.
+This design has two results. A tone starts without waiting for a new process. Two tones that occur
+together become one mixed sound.
+
+A tone does not start at the head of the block that carries it. Each play command holds the moment
+the grid meant it for, and the mixer places its first sample that far into the block: 5 milliseconds
+of lateness is 220 frames of silence before the strike. Without that, every tone inside one 10
+millisecond block would collapse onto the same instant, and an even grid could hold no more than
+100 ticks a second. With it the grid is bounded by the 2 millisecond floor on its period, not by
+the block.
 
 A pipe does not discard data. If the event loop stops for more than 40 ms, all later blips move
 back in time and stay late. To prevent this delay, the mixer discards the audio of the interval that
@@ -584,23 +597,24 @@ the reason and changes nothing.
 
 Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts these keys:
 
-| Key             | Type                                                                           | Function                                                        |
-| --------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| `enabled`       | boolean                                                                        | Whether this voice sounds. The voice commands write this key.   |
-| `divisor`       | positive integer                                                               | Ticks of the grid spent on one blip of this voice.              |
-| `stride`        | positive integer                                                               | Characters the reading walks for one blip.                      |
-| `toneMs`        | number                                                                         | The length of one tone in milliseconds.                         |
-| `decay`         | positive number                                                                | Multiplies the material's decay rate. Lower values ring longer. |
-| `swell`         | number from 0 to 1                                                             | The part of the tone spent rising to full level.                |
-| `hold`          | number from 0 to 1                                                             | The part of the tone held at full body before the decay starts. |
-| `glide`         | number                                                                         | Semitones the pitch falls across one tone. 0 holds it steady.   |
-| `volume`        | number from 0 to 1                                                             | The loudness of this voice.                                     |
-| `material`      | `"wood"`, `"stone"`, `"ceramic"`, `"glass"`, `"reed"`, `"brass"`, or `"vocal"` | The resonant material.                                          |
-| `color`         | a colour object                                                                | Where the second resonance sits, for a sustained material.      |
-| `touch`         | `"soft"`, `"normal"`, or `"firm"`                                              | The attack and upper-mode strength.                             |
-| `baseFrequency` | number                                                                         | The reference frequency in Hz of this voice.                    |
-| `reading`       | a reading object                                                               | How a character becomes a number, or becomes silent.            |
-| `pitch`         | a pitch object                                                                 | How that number becomes a frequency.                            |
+| Key             | Type                                                                           | Function                                                         |
+| --------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `enabled`       | boolean                                                                        | Whether this voice sounds. The voice commands write this key.    |
+| `divisor`       | positive integer                                                               | Ticks of the grid spent on one blip of this voice.               |
+| `stride`        | positive integer                                                               | Characters the reading walks for one blip.                       |
+| `catchup`       | positive integer                                                               | Ticks a backlog may take to cross. Higher keeps every character. |
+| `toneMs`        | number                                                                         | The length of one tone in milliseconds.                          |
+| `decay`         | positive number                                                                | Multiplies the material's decay rate. Lower values ring longer.  |
+| `swell`         | number from 0 to 1                                                             | The part of the tone spent rising to full level.                 |
+| `hold`          | number from 0 to 1                                                             | The part of the tone held at full body before the decay starts.  |
+| `glide`         | number                                                                         | Semitones the pitch falls across one tone. 0 holds it steady.    |
+| `volume`        | number from 0 to 1                                                             | The loudness of this voice.                                      |
+| `material`      | `"wood"`, `"stone"`, `"ceramic"`, `"glass"`, `"reed"`, `"brass"`, or `"vocal"` | The resonant material.                                           |
+| `color`         | a colour object                                                                | Where the second resonance sits, for a sustained material.       |
+| `touch`         | `"soft"`, `"normal"`, or `"firm"`                                              | The attack and upper-mode strength.                              |
+| `baseFrequency` | number                                                                         | The reference frequency in Hz of this voice.                     |
+| `reading`       | a reading object                                                               | How a character becomes a number, or becomes silent.             |
+| `pitch`         | a pitch object                                                                 | How that number becomes a frequency.                             |
 
 A colour object is either `{ "kind": "fixed", "at": <0 to 1> }` or
 `{ "kind": "vowel", "span": <count> }`.

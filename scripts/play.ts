@@ -55,7 +55,7 @@ export const playText = (
 
     // The tail holds the device open while the last tone decays.
     const commands = concat(
-      blips.pipe(map(({ tone }) => play(tone))),
+      blips.pipe(map(({ tone, at }) => play(tone, at))),
       timer(voice.toneMs * TAIL).pipe(ignoreElements())
     )
 

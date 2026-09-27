@@ -3,11 +3,12 @@ import type {
   MessageUpdateEvent
 } from '@oh-my-pi/pi-coding-agent'
 import {
+  defer,
   distinctUntilChanged,
+  expand,
   filter,
   groupBy,
   ignoreElements,
-  interval,
   map,
   merge,
   mergeMap,
@@ -17,6 +18,7 @@ import {
   share,
   startWith,
   switchMap,
+  timer,
   withLatestFrom
 } from 'rxjs'
 import { match, P } from 'ts-pattern'
@@ -25,7 +27,6 @@ import { colorOf } from './color.ts'
 import { frequencyOf } from './pitch.ts'
 import { spatialOf } from './spatial.ts'
 import { type Reading, type ReadingConfig, readingOf } from './reading.ts'
-import { TICK_MS } from './players/mixer.ts'
 import type { Tone } from './players/types.ts'
 
 /** A slice of one stream kind, exactly as the agent delivered it. */
@@ -43,6 +44,8 @@ export interface Voicing {
 export interface Blip {
   readonly char: string
   readonly tone: Tone
+  /** The moment the grid meant this tone to sound. */
+  readonly at: number
 }
 
 type AssistantEvent = MessageUpdateEvent['assistantMessageEvent']
@@ -82,34 +85,52 @@ export const stoppedEarly = (message: MessageEndEvent['message']): boolean =>
     )
     .otherwise(() => false)
 
+/** Two tones closer than this are one click, whatever the grid asks for. */
+const MIN_PERIOD_MS = 2
+
 /** The effective period shared by playback and audition scheduling. */
 export const gridPeriodMs = (hz: number): number =>
-  Math.max(TICK_MS, Math.round(1000 / hz / TICK_MS) * TICK_MS)
+  Math.max(MIN_PERIOD_MS, 1000 / hz)
+
+/** A grid tick: which one it is, and the moment it was due. */
+export interface Tick {
+  readonly index: number
+  /** The moment the grid asked for, not the moment the timer woke up. */
+  readonly at: number
+}
 
 /**
  * The grid every voice sounds on, numbered so a voice can take every `n`th
  * tick. One timer, shared: three timers at three rates would drift apart and
  * the voices with them.
  *
- * The period is snapped to a whole number of mixer ticks. The mixer starts a
- * tone at the head of the block it is writing, so a period off its own grid
- * would land tones a tick early or late at random. That wobble is inaudible on
- * a screen and very audible in a beat.
+ * Each tick is scheduled against the moment it is due rather than the moment
+ * the last one fired, so a late wake-up costs that tick alone and never moves
+ * the grid. `setInterval` does the opposite: it adds its lateness to every
+ * tick after it, and a 10 ms period drifts a quarter of a second away inside
+ * 300 ticks. The due time travels with the tick, so the mixer can place the
+ * tone at the sample the grid meant even when the wake-up was a millisecond
+ * late.
  */
-export const gridFrom = (tickHz: Observable<number>): Observable<number> =>
+export const gridFrom = (tickHz: Observable<number>): Observable<Tick> =>
   tickHz.pipe(
     map(gridPeriodMs),
     distinctUntilChanged(),
-    switchMap((periodMs) => interval(periodMs)),
+    switchMap((periodMs) =>
+      defer(() => {
+        const opened = performance.now()
+        const due = (index: number): Observable<Tick> => {
+          const at = opened + (index + 1) * periodMs
+          return timer(Math.max(0, at - performance.now())).pipe(
+            map(() => ({ index, at }))
+          )
+        }
+
+        return due(0).pipe(expand(({ index }) => due(index + 1)))
+      })
+    ),
     share()
   )
-
-/**
- * Ticks the cursor is given to close whatever gap it finds. The stride widens
- * with the backlog so a burst is crossed in about this many ticks; the grid
- * itself never moves, so catching up costs text resolution and not tempo.
- */
-const CATCHUP_TICKS = 8
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 
@@ -221,10 +242,10 @@ const toneOf = (
 })
 
 /** One sounding: walk the stride, or more of it when the text got ahead. */
-const drain = (cursor: Cursor, voice: VoiceConfig): Cursor => {
+const drain = (cursor: Cursor, voice: VoiceConfig, at: number): Cursor => {
   const catchupStride = Math.max(
     cursor.catchupStride,
-    Math.ceil(cursor.backlog / CATCHUP_TICKS)
+    Math.ceil(cursor.backlog / voice.catchup)
   )
   const walked = walk(
     readingFor(cursor, voice.reading),
@@ -247,7 +268,8 @@ const drain = (cursor: Cursor, voice: VoiceConfig): Cursor => {
       .with(P.nullish, () => undefined)
       .otherwise(({ char, index }) => ({
         char,
-        tone: toneOf(voice, index, char, cursor.ordinal)
+        tone: toneOf(voice, index, char, cursor.ordinal),
+        at
       }))
   }
 }
@@ -255,7 +277,7 @@ const drain = (cursor: Cursor, voice: VoiceConfig): Cursor => {
 /** Text arriving and the grid ticking are the only two things that happen. */
 type Pulse =
   | { readonly type: 'text'; readonly text: string }
-  | { readonly type: 'tick'; readonly at: number }
+  | { readonly type: 'tick'; readonly tick: Tick }
 
 /**
  * A delta only moves the far end of the buffer; the grid is what sounds. A
@@ -273,10 +295,10 @@ const step = (cursor: Cursor, pulse: Pulse, { voice }: Voicing): Cursor =>
           backlog: cursor.backlog + countGraphemes(text),
           blip: undefined
         }))
-        .with({ type: 'tick', at: P.number.select() }, (at) =>
-          match(at % voiced.divisor === 0 && cursor.backlog > 0)
+        .with({ type: 'tick', tick: P.select() }, ({ index, at }) =>
+          match(index % voiced.divisor === 0 && cursor.backlog > 0)
             .with(false, () => ({ ...cursor, blip: undefined }))
-            .with(true, () => drain(cursor, voiced))
+            .with(true, () => drain(cursor, voiced, at))
             .exhaustive()
         )
         .exhaustive()
@@ -290,12 +312,12 @@ const step = (cursor: Cursor, pulse: Pulse, { voice }: Voicing): Cursor =>
 export const tonesFrom =
   (
     voicing: Observable<Voicing>,
-    ticks: Observable<number>
+    ticks: Observable<Tick>
   ): OperatorFunction<string, Blip> =>
   (deltas) =>
     merge(
       deltas.pipe(map((text): Pulse => ({ type: 'text', text }))),
-      ticks.pipe(map((at): Pulse => ({ type: 'tick', at })))
+      ticks.pipe(map((tick): Pulse => ({ type: 'tick', tick })))
     ).pipe(
       withLatestFrom(voicing),
       scan((cursor, [pulse, current]) => step(cursor, pulse, current), START),
@@ -321,7 +343,7 @@ export const blipsFrom = (
   chunks: Observable<Chunk>,
   voicing: (kind: StreamKind) => Observable<Voicing>,
   restart: Observable<unknown>,
-  ticks: Observable<number>
+  ticks: Observable<Tick>
 ): Observable<Voiced> =>
   merge(
     // Keep the clock subscribed while a restart replaces all of its cursors.

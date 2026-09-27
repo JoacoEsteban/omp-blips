@@ -114,10 +114,10 @@ const openDevice = (): Device => {
 
 const asMixerEvent = (command: PlayCommand): MixerEvent =>
   match(command)
-    .with({ type: 'play' }, ({ tone }): MixerEvent => ({
+    .with({ type: 'play' }, ({ tone, at }): MixerEvent => ({
       type: 'play',
       tone,
-      at: performance.now()
+      at
     }))
     .with({ type: 'flush' }, (): MixerEvent => ({ type: 'flush' }))
     .exhaustive()

@@ -831,25 +831,33 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // The fastest reading the audio path allows. The mixer writes in 10 ms
-  // blocks, so 100 Hz is one tone per block and the hard ceiling of the grid:
-  // above it two tones would land in the same block and one would be lost.
-  // Every voice takes every grapheme at that rate, so a stream arriving under
-  // the grid is heard grapheme by grapheme. Deltas do not arrive evenly, so a
-  // burst at the grid rate already outruns it and the catch-up stride starts
-  // skipping: at 50 characters a second every voiced grapheme sounds, at 100
-  // about two in three do.
-  // Tones are shorter than the period, so each one is a tick and not a drone.
+  // The fastest reading the audio path allows. The mixer places a tone at the
+  // sample it was due, not at the head of the block it is writing, so the grid
+  // is not bounded by the 10 ms block: 250 ticks a second is faster than any
+  // provider streams, and every grapheme of a full-speed answer gets its own
+  // tick with the stride never widening.
+  //
+  // A tone cannot be shorter than the 4 ms period and still be heard. This
+  // renderer builds its resonances over the length of the tone, so a 3 ms
+  // click peaks around a thirtieth of a 30 ms one, and the ear integrates a
+  // burst over far longer than either. These tones are three periods long and
+  // overlap by design: what carries the rhythm at this rate is the strike, not
+  // the silence between strikes. A soft touch is no use here either — its 8 ms
+  // attack is most of the tone — so every voice is struck firm.
   geiger: {
-    description: 'One tick for each character, as fast as the grid goes.',
+    description: 'One tick for each character, at any speed text arrives.',
     patch: {
-      tickHz: 100,
+      tickHz: 250,
       voices: {
         text: {
           spatial: { placement: { kind: 'fixed', at: -0.2 } },
           divisor: 1,
           stride: 1,
-          toneMs: 6,
+          // A delta carries a token, not a character. The window is wide
+          // enough to cross one without the stride ever leaving 1, which is
+          // what makes the tick-per-grapheme promise hold through a burst.
+          catchup: 32,
+          toneMs: 12,
           decay: 2.4,
           volume: 0.45,
           material: 'stone',
@@ -864,7 +872,8 @@ export const presets: Record<PresetName, Preset> = {
           spatial: { placement: { kind: 'fixed', at: 0.25 } },
           divisor: 1,
           stride: 1,
-          toneMs: 7,
+          catchup: 32,
+          toneMs: 12,
           decay: 2.2,
           volume: 0.4,
           material: 'wood',
@@ -879,7 +888,8 @@ export const presets: Record<PresetName, Preset> = {
           },
           divisor: 1,
           stride: 1,
-          toneMs: 5,
+          catchup: 32,
+          toneMs: 8,
           decay: 2.6,
           volume: 0.3,
           material: 'glass',

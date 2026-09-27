@@ -535,7 +535,7 @@ export const createTuner = (): Tuner => {
         .with(true, () => deltas.pipe(tonesFrom(voicing, gridFrom(tickHz))))
         .exhaustive()
     ),
-    map(({ tone }) => play(tone))
+    map(({ tone, at }) => play(tone, at))
   )
 
   const component = (

@@ -1,40 +1,65 @@
 import { expect, test } from 'bun:test'
-import { of, Subject } from 'rxjs'
-import { TestScheduler } from 'rxjs/testing'
+import { firstValueFrom, of, Subject, take, toArray } from 'rxjs'
 import { defaultConfig } from './config.ts'
-import { blipsFrom, type Chunk, gridFrom, tonesFrom } from './stream.ts'
+import {
+  blipsFrom,
+  type Chunk,
+  gridFrom,
+  gridPeriodMs,
+  type Tick,
+  tonesFrom
+} from './stream.ts'
 import type { SpatialConfig } from './spatial.ts'
 
+/** A tick of a 50 ms grid, which is what a 20 Hz preset asks for. */
+const tick = (index: number): Tick => ({ index, at: index * 50 })
+
 test('message boundaries preserve the grid phase and discard unread text', () => {
-  const scheduler = new TestScheduler(() => {})
-  scheduler.run(() => {
-    const chunks = new Subject<Chunk>()
-    const restart = new Subject<void>()
-    const sounded: { at: number; char: string }[] = []
-    const subscription = blipsFrom(
-      chunks,
-      () => of({ voice: { ...defaultConfig.voices.thinking, stride: 1 } }),
-      restart,
-      gridFrom(of(20))
-    ).subscribe(({ char }) => sounded.push({ at: scheduler.now(), char }))
+  const chunks = new Subject<Chunk>()
+  const restart = new Subject<void>()
+  const ticks = new Subject<Tick>()
+  const sounded: { at: number; char: string }[] = []
+  const subscription = blipsFrom(
+    chunks,
+    () => of({ voice: { ...defaultConfig.voices.thinking, stride: 1 } }),
+    restart,
+    ticks
+  ).subscribe(({ char, at }) => sounded.push({ at, char }))
 
-    scheduler.schedule(() => chunks.next({ kind: 'thinking', delta: 'ab' }), 10)
-    scheduler.schedule(() => restart.next(), 70)
-    scheduler.schedule(() => chunks.next({ kind: 'thinking', delta: 'cd' }), 80)
-    scheduler.schedule(() => subscription.unsubscribe(), 360)
-    scheduler.flush()
+  chunks.next({ kind: 'thinking', delta: 'ab' })
+  ticks.next(tick(0))
+  ticks.next(tick(1))
+  restart.next()
+  chunks.next({ kind: 'thinking', delta: 'cd' })
+  for (let index = 2; index <= 7; index += 1) ticks.next(tick(index))
 
-    expect(sounded).toEqual([
-      { at: 50, char: 'a' },
-      { at: 200, char: 'c' },
-      { at: 350, char: 'd' }
-    ])
-  })
+  // The phase belongs to the grid, not to the message: the divisor of three
+  // keeps sounding on ticks 0, 3 and 6, and the unread `b` is gone.
+  expect(sounded).toEqual([
+    { at: 0, char: 'a' },
+    { at: 150, char: 'c' },
+    { at: 300, char: 'd' }
+  ])
+  subscription.unsubscribe()
+})
+
+test('the grid keeps its own time whatever the timer does', async () => {
+  const ticks = await firstValueFrom(
+    gridFrom(of(200)).pipe(take(12), toArray())
+  )
+  const period = gridPeriodMs(200)
+  const gaps = ticks
+    .slice(1)
+    .map(({ at }, index) => at - (ticks[index]?.at ?? 0))
+
+  expect(period).toBe(5)
+  expect(ticks.map(({ index }) => index)).toEqual([...Array(12).keys()])
+  for (const gap of gaps) expect(gap).toBeCloseTo(period, 9)
 })
 
 test('a burst drains in eight sounding ticks and restores the configured stride', () => {
   const deltas = new Subject<string>()
-  const ticks = new Subject<number>()
+  const ticks = new Subject<Tick>()
   const sounded: string[] = []
   const subscription = deltas
     .pipe(
@@ -46,20 +71,20 @@ test('a burst drains in eight sounding ticks and restores the configured stride'
     .subscribe(({ char }) => sounded.push(char))
 
   deltas.next('a'.repeat(999) + 'z')
-  for (let tick = 0; tick < 16; tick += 1) ticks.next(tick)
+  for (let index = 0; index < 16; index += 1) ticks.next(tick(index))
   expect(sounded).toEqual([...Array<string>(7).fill('a'), 'z'])
 
   deltas.next('bc')
-  ticks.next(16)
-  ticks.next(17)
-  ticks.next(18)
+  ticks.next(tick(16))
+  ticks.next(tick(17))
+  ticks.next(tick(18))
   expect(sounded.slice(8)).toEqual(['b', 'c'])
   subscription.unsubscribe()
 })
 
 test('new text can widen an ongoing catch-up without extending it indefinitely', () => {
   const deltas = new Subject<string>()
-  const ticks = new Subject<number>()
+  const ticks = new Subject<Tick>()
   const sounded: string[] = []
   const subscription = deltas
     .pipe(
@@ -71,16 +96,16 @@ test('new text can widen an ongoing catch-up without extending it indefinitely',
     .subscribe(({ char }) => sounded.push(char))
 
   deltas.next('a'.repeat(1000))
-  ticks.next(0)
+  ticks.next(tick(0))
   deltas.next('b'.repeat(999) + 'z')
-  for (let tick = 1; tick <= 8; tick += 1) ticks.next(tick)
+  for (let index = 1; index <= 8; index += 1) ticks.next(tick(index))
   expect(sounded.at(-1)).toBe('z')
   subscription.unsubscribe()
 })
 
 test('spatial characters route from the selected character, not its index', () => {
   const deltas = new Subject<string>()
-  const ticks = new Subject<number>()
+  const ticks = new Subject<Tick>()
   const spatial: SpatialConfig = {
     placement: {
       kind: 'characters',
@@ -109,14 +134,14 @@ test('spatial characters route from the selected character, not its index', () =
     .subscribe(({ tone }) => sounded.push(tone.spatial.at))
 
   deltas.next('a1')
-  ticks.next(0)
+  ticks.next(tick(0))
   expect(sounded).toEqual([0.8])
   subscription.unsubscribe()
 })
 
 test('alternate spatial placement advances only for emitted blips', () => {
   const deltas = new Subject<string>()
-  const ticks = new Subject<number>()
+  const ticks = new Subject<Tick>()
   const spatial: SpatialConfig = {
     placement: { kind: 'alternate', positions: [-1, 1] }
   }
@@ -138,9 +163,9 @@ test('alternate spatial placement advances only for emitted blips', () => {
     .subscribe(({ tone }) => sounded.push(tone.spatial.at))
 
   deltas.next('a b')
-  ticks.next(0)
-  ticks.next(1)
-  ticks.next(2)
+  ticks.next(tick(0))
+  ticks.next(tick(1))
+  ticks.next(tick(2))
   expect(sounded).toEqual([-1, 1])
   subscription.unsubscribe()
 })
@@ -148,7 +173,7 @@ test('alternate spatial placement advances only for emitted blips', () => {
 test('alternate placement resets at a message boundary', () => {
   const chunks = new Subject<Chunk>()
   const restart = new Subject<void>()
-  const ticks = new Subject<number>()
+  const ticks = new Subject<Tick>()
   const spatial: SpatialConfig = {
     placement: { kind: 'alternate', positions: [-1, 1] }
   }
@@ -169,10 +194,10 @@ test('alternate placement resets at a message boundary', () => {
   ).subscribe(({ tone }) => sounded.push(tone.spatial.at))
 
   chunks.next({ kind: 'text', delta: 'a' })
-  ticks.next(0)
+  ticks.next(tick(0))
   restart.next()
   chunks.next({ kind: 'text', delta: 'b' })
-  ticks.next(1)
+  ticks.next(tick(1))
   expect(sounded).toEqual([-1, -1])
   subscription.unsubscribe()
 })

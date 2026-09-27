@@ -25,6 +25,13 @@ export interface VoiceConfig {
    * how much text that blip stands for.
    */
   readonly stride: number
+  /**
+   * Ticks the cursor may take to cross whatever backlog it finds. A wide
+   * window keeps the stride at its configured width through a burst, at the
+   * cost of trailing the text for longer. A narrow one stays in step with the
+   * text and spends resolution to do it.
+   */
+  readonly catchup: number
   /** Length of a single tone, in milliseconds. */
   readonly toneMs: number
   /** Multiplier for the material's modal decay rate; lower values ring longer. */
@@ -84,6 +91,7 @@ export const defaultConfig: BlipConfig = {
       enabled: true,
       divisor: 2,
       stride: 3,
+      catchup: 8,
       toneMs: 55,
       decay: 1,
       swell: 0,
@@ -109,6 +117,7 @@ export const defaultConfig: BlipConfig = {
       enabled: true,
       divisor: 3,
       stride: 4,
+      catchup: 8,
       toneMs: 90,
       decay: 1,
       swell: 0,
@@ -134,6 +143,7 @@ export const defaultConfig: BlipConfig = {
       enabled: true,
       divisor: 1,
       stride: 8,
+      catchup: 8,
       toneMs: 26,
       decay: 1,
       swell: 0,

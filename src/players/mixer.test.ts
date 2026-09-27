@@ -136,3 +136,31 @@ test('end drains a natural source instead of cutting it', () => {
   const done = step(drained, { type: 'tick', at: 210 })
   expect(done.done).toBe(true)
 })
+
+test('a tone starts at the sample it asked for, not at the head of the block', () => {
+  const step = mixerStep(Infinity)
+  // One block covering 10 ms of new audio, with a tone due 5 ms into it.
+  const opened = step(openMixer(0), { type: 'tick', at: 0 })
+  const struck = step(opened, { type: 'play', tone: tone({ at: 0 }), at: 5 })
+  const block = step(struck, { type: 'tick', at: 10 }).block
+  if (block === undefined) throw new Error('expected a rendered block')
+
+  const energy = (from: number, to: number): number => {
+    let total = 0
+    for (let frame = from; frame < to; frame += 1)
+      total += Math.abs(block.readInt16LE(frame * 4))
+    return total
+  }
+  // 5 ms is 220 frames at 44.1 kHz; the strike lands on the far side of them.
+  expect(energy(0, 200)).toBe(0)
+  expect(energy(240, 440)).toBeGreaterThan(0)
+})
+
+test('two tones inside one tick keep the distance between them', () => {
+  const step = mixerStep(Infinity)
+  const opened = step(openMixer(0), { type: 'tick', at: 0 })
+  const first = step(opened, { type: 'play', tone: tone({ at: 0 }), at: 2 })
+  const second = step(first, { type: 'play', tone: tone({ at: 0 }), at: 7 })
+
+  expect(second.ringing.map(({ offset }) => offset)).toEqual([-88, -309])
+})

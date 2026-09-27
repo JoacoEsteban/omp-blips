@@ -74,6 +74,11 @@ export const renderSource = (
 interface Ringing {
   readonly source: Source
   readonly gain: number
+  /**
+   * Samples of this source already rendered. It starts negative when the tone
+   * asked for a moment inside the block rather than its head: those frames are
+   * the silence it waits through first.
+   */
   readonly offset: number
   readonly spatial: Tone['spatial']
   /** Zero means ringing naturally; positive means a per-tone release is active. */
@@ -93,6 +98,8 @@ export interface MixerState {
   readonly ringing: readonly Ringing[]
   /** Samples handed to the device so far. */
   readonly cursor: number
+  /** Wall clock of the last tick, which is where the next block begins. */
+  readonly tickedAt: number
   readonly lastToneAt: number
   /** No further tones can arrive: the command stream is finished. */
   readonly ended: boolean
@@ -112,6 +119,7 @@ export const openMixer = (at: number): MixerState => ({
   openedAt: at,
   ringing: [],
   cursor: 0,
+  tickedAt: at,
   lastToneAt: at,
   ended: false,
   block: undefined,
@@ -171,30 +179,21 @@ const mixBlock = (
     let left = 0
     let right = 0
     for (const sound of ringing) {
+      const index = sound.offset + i
+      // The tone has not started yet: it asked for a sample further into this
+      // block, and the frames before it are silence.
+      if (index < 0) continue
       const motion = sound.spatial.motion
       let pan = sound.spatial.at
       let leftGain = sound.leftGain
       let rightGain = sound.rightGain
       if (motion !== undefined) {
-        pan = motionPan(
-          sound.spatial.at,
-          motion,
-          sound.offset + i,
-          cursor + i,
-          openedAt
-        )
+        pan = motionPan(sound.spatial.at, motion, index, cursor + i, openedAt)
         const angle = ((pan + 1) * Math.PI) / 4
         leftGain = Math.cos(angle)
         rightGain = Math.sin(angle)
       }
-      renderSource(
-        sound.source,
-        sound.offset + i,
-        pan,
-        leftGain,
-        rightGain,
-        frame
-      )
+      renderSource(sound.source, index, pan, leftGain, rightGain, frame)
       let releaseGain = 1
       if (sound.release > 0)
         releaseGain = Math.max(0, sound.release - i - 1) / FADE_FRAMES
@@ -207,9 +206,20 @@ const mixBlock = (
   return { block, ringing: advance(ringing, frames) }
 }
 
+/**
+ * A tone starts at the sample its event asked for, not at the head of the next
+ * block. The block about to be written begins at the wall clock of the last
+ * tick, so the distance from there to `at` is the silence the tone waits
+ * through first. Without it every tone inside a tick would collapse onto the
+ * same instant, which caps an even grid at one tone per block.
+ */
 const struck = (state: MixerState, tone: Tone, at: number): MixerState => {
   if (state.ringing.length >= MAX_VOICES) return { ...state, block: undefined }
   const gains = panGains(tone.spatial.at)
+  const waited = Math.max(
+    0,
+    Math.round(((at - state.tickedAt) * SAMPLE_RATE) / 1000)
+  )
   return {
     ...state,
     lastToneAt: at,
@@ -218,7 +228,7 @@ const struck = (state: MixerState, tone: Tone, at: number): MixerState => {
       {
         source: { kind: 'mono', samples: voice(tone) },
         gain: tone.volume,
-        offset: 0,
+        offset: -waited,
         spatial: tone.spatial,
         release: 0,
         leftGain: gains[0],
@@ -263,6 +273,8 @@ const ticked = (idleMs: number, state: MixerState, at: number): MixerState => {
   return {
     ...state,
     cursor: state.cursor + frames,
+    // The block that follows begins where this one ended, which is now.
+    tickedAt: at,
     ringing: mixed.ringing,
     block: mixed.block,
     done: false
