@@ -481,6 +481,11 @@ millisecond block would collapse onto the same instant, and an even grid could h
 100 ticks a second. With it the grid is bounded by the 2 millisecond floor on its period, not by
 the block.
 
+The mixer rings 32 tones at once and refuses the next one until a voice ends. The cost of the mix
+is linear in that number: 32 voices cost under a tenth of a 10 millisecond block, and under a
+fifth of one when every voice carries motion. The presets that ship stay far below it. With all
+three voices reading at once, `haiku` reaches 12 rings and every other preset stays under 6.
+
 A pipe does not discard data. If the event loop stops for more than 40 ms, all later blips move
 back in time and stay late. To prevent this delay, the mixer discards the audio of the interval that
 it missed. The tones become older as if the audio had played. As a result, the sound stays

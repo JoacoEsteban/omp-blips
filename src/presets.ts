@@ -982,10 +982,10 @@ export const presets: Record<PresetName, Preset> = {
   // a tritone stack, and the low voice sits a few cents under F#2 so it beats
   // against everything above it.
   //
-  // The tone lengths are not free. The mixer rings eight voices and drops the
-  // ninth, so three voices at one tick per grapheme share 32 ms of the 4 ms
-  // grid; 12 + 9 + 7 stays under that with a voice to spare, and no character
-  // is ever the one that goes missing. Every voice is struck `firm` because a
+  // The tone lengths are not free. The mixer rings 32 voices and drops the
+  // next, so three voices at one tick per grapheme share 128 ms of the 4 ms
+  // grid; 12 + 9 + 7 leaves most of that spare, and no character is ever the
+  // one that goes missing. Every voice is struck `firm` because a
   // `soft` attack alone is 8 ms. The character is spent on glide instead:
   // the prose falls a fifth inside each tone and the muttering rises a fourth,
   // so the two are always sliding past each other.

@@ -9,8 +9,15 @@ export const TICK_MS = 10
 const LEAD_MS = 40
 /** Ramp to silence over this long on a flush; cutting a ringing voice dead clicks. */
 const FADE_MS = 6
-/** Simultaneous tones in the mix. */
-const MAX_VOICES = 8
+/**
+ * Simultaneous tones in the mix. The cost of the mix is linear in this: 32
+ * voices cost under a tenth of a 10 ms block, and under a fifth of one when
+ * every voice carries motion, which recomputes its pan for each frame. It is
+ * set well above what a preset needs — three voices on a 250 Hz grid share
+ * 128 ms of tone at this cap — because the tone that a full mix refuses is a
+ * character that never sounds.
+ */
+const MAX_VOICES = 32
 
 /** Samples of write-ahead the mixer maintains. */
 const LEAD_FRAMES = Math.round((LEAD_MS * SAMPLE_RATE) / 1000)
