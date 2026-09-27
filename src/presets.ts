@@ -23,6 +23,7 @@ export const PRESET_NAMES = [
   'telegraph',
   'geiger',
   'hexdump',
+  'psychosis',
   'sans'
 ] as const
 
@@ -967,6 +968,118 @@ export const presets: Record<PresetName, Preset> = {
           baseFrequency: 523.25,
           reading: { kind: 'codepoint', span: 32 },
           pitch: { kind: 'chromatic', span: 24 }
+        }
+      }
+    }
+  },
+
+  // Three voices reading the same characters at the same moment, and agreeing
+  // about none of them. Each one takes every grapheme — `codepoint`, stride 1,
+  // divisor 1 on a 250 Hz grid — through a different modulus, so one letter is
+  // three unrelated pitches at once, and the moduli are coprime (17, 13, 11)
+  // so the three readings never fall back into step. The registers are tuned
+  // apart rather than together: 622.25 Hz against 91 Hz against 1479.98 Hz is
+  // a tritone stack, and the low voice sits a few cents under F#2 so it beats
+  // against everything above it.
+  //
+  // The tone lengths are not free. The mixer rings eight voices and drops the
+  // ninth, so three voices at one tick per grapheme share 32 ms of the 4 ms
+  // grid; 12 + 9 + 7 stays under that with a voice to spare, and no character
+  // is ever the one that goes missing. Every voice is struck `firm` because a
+  // `soft` attack alone is 8 ms. The character is spent on glide instead:
+  // the prose falls a fifth inside each tone and the muttering rises a fourth,
+  // so the two are always sliding past each other.
+  psychosis: {
+    description:
+      'Every character, three times at once, in three tunings that disagree.',
+    patch: {
+      tickHz: 250,
+      voices: {
+        text: {
+          spatial: {
+            placement: {
+              kind: 'characters',
+              groups: [
+                { chars: 'aeiouAEIOU', at: -0.85 },
+                { chars: '0123456789', at: 0.85 },
+                { chars: '.,;:!?\'"()[]{}', at: 0.55 }
+              ],
+              otherwise: 0
+            },
+            // Clocked on the voice, not the tone: a 13 ms tone cannot move, so
+            // what swings is the whole field, and slowly enough to be felt
+            // rather than heard.
+            motion: {
+              kind: 'oscillate',
+              clock: 'voice',
+              depth: 0.15,
+              periodMs: 5300
+            }
+          },
+          divisor: 1,
+          stride: 1,
+          catchup: 32,
+          toneMs: 12,
+          decay: 2.2,
+          glide: 7,
+          volume: 0.32,
+          material: 'ceramic',
+          touch: 'firm',
+          baseFrequency: 622.25,
+          reading: { kind: 'codepoint', span: 17 },
+          pitch: { kind: 'chromatic', span: 17 }
+        },
+        thinking: {
+          // Dead centre, and the widest swing of the three: the mutter starts
+          // inside the head and keeps leaving it. Its period is coprime with
+          // the prose voice's, so the two never come back to the same place.
+          spatial: {
+            placement: { kind: 'fixed', at: 0 },
+            motion: {
+              kind: 'oscillate',
+              clock: 'voice',
+              depth: 0.9,
+              periodMs: 2900
+            }
+          },
+          divisor: 1,
+          stride: 1,
+          catchup: 32,
+          toneMs: 9,
+          decay: 2.6,
+          glide: -5,
+          volume: 0.22,
+          material: 'reed',
+          // The one sustained material here, so the one voice that reads
+          // `color`: five mouth shapes in rotation turn a run of characters
+          // into something with consonants in it.
+          color: { kind: 'vowel', span: 5 },
+          touch: 'firm',
+          baseFrequency: 91,
+          reading: { kind: 'codepoint', span: 13 },
+          pitch: { kind: 'chromatic', span: 13 }
+        },
+        tool: {
+          // Six positions, not two: an even ping-pong is a rhythm, and this
+          // voice is not allowed to become one.
+          spatial: {
+            placement: {
+              kind: 'alternate',
+              positions: [-1, 0.5, 1, -0.5, 1, -1]
+            }
+          },
+          divisor: 1,
+          stride: 1,
+          catchup: 32,
+          toneMs: 7,
+          decay: 3,
+          glide: 12,
+          volume: 0.38,
+          material: 'glass',
+          touch: 'firm',
+          baseFrequency: 1479.98,
+          reading: { kind: 'codepoint', span: 11 },
+          pitch: { kind: 'chromatic', span: 11 }
         }
       }
     }

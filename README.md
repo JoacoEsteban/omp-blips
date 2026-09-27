@@ -190,9 +190,10 @@ profile: `src/preset-sans.ts`. The default preset has the name `default`.
 | `telegraph`  | A wire. Each character is one tick, and only the spaces speak.                      | `class`     |
 | `geiger`     | One tick for each character, at any speed the text arrives.                         | `class`     |
 | `hexdump`    | Raw bytes. Punctuation sounds, and the tool calls lead.                             | `codepoint` |
+| `psychosis`  | Every character, three times at once, in three tunings that disagree.               | `codepoint` |
 | `sans`       | A rising vocal blip. Rounded low tones, one for each character.                     | `vocal`     |
 
-The seven presets after `quiet` each show one reading or one pitch with nothing in its way:
+The eight presets after `quiet` each show one reading or one pitch with nothing in its way:
 
 - `haiku` gives `phrase` long tones on a slow grid, so no word is lost.
 - `pulse` puts `phrase` against `drone`. The reading keeps the words and the pitch drops the
@@ -212,6 +213,13 @@ The seven presets after `quiet` each show one reading or one pitch with nothing 
   struck `firm` for the same reason, because a `soft` attack alone takes 8 milliseconds.
 - `hexdump` reads the tool arguments character by character. It is the one preset in which the
   tool voice leads.
+- `psychosis` runs the `geiger` grid with all three voices on the same characters at the same
+  moment. Each voice folds the character through a different modulus — 17, 13 and 11 — so one
+  letter is three unrelated pitches, and the three moduli are coprime, so the readings never fall
+  back into step. The registers are a tritone apart and the low voice sits a few cents under F#2,
+  so it beats against everything above it. Each tone bends inside its own length: the prose falls
+  a fifth, the reasoning rises a fourth, the tool voice falls an octave. The whole field swings
+  from side to side on two periods that never realign.
 
 `sans` uses the dedicated `vocal` material for a low character voice. Each text blip lasts 140 milliseconds
 at 164.81 Hz. It rises across its first 15%, holds until its midpoint, then fades.
