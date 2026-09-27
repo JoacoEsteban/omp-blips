@@ -4,16 +4,8 @@ import type { Device } from './player.ts'
 import type { LoadedSettings } from './settings.ts'
 import type { Voicing } from './stream.ts'
 
-/**
- * Everything the extension knows between two events, as one value. Nothing here
- * is mutated: an event returns the next session, and the audio follows it.
- *
- * No state outlives the config file: a command writes the file and the reducer
- * takes what the next read gave back, so a session starts where the last ended.
- */
 export interface Session {
   readonly settings: LoadedSettings
-  /** What the event that produced this session asks the UI to say. */
   readonly notice: string
 }
 
@@ -27,7 +19,6 @@ export const initialSession: Session = {
   notice: ''
 }
 
-/** A command that only turns voices on or off. */
 export type VoiceIntent =
   | { readonly type: 'toggle'; readonly kind: StreamKind }
   | { readonly type: 'all'; readonly enabled: boolean }
@@ -35,23 +26,19 @@ export type VoiceIntent =
   | { readonly type: 'cycle' }
 
 export type SessionEvent =
-  /** A fresh read of the config file. */
   | { readonly type: 'loaded'; readonly settings: LoadedSettings }
-  /** A read that followed a change to the voices, reported as such. */
   | { readonly type: 'switched'; readonly settings: LoadedSettings }
   | { readonly type: 'say'; readonly text: string }
 
 const silent = (session: Session): boolean =>
   !STREAM_KINDS.some((kind) => session.settings.config.voices[kind].enabled)
 
-/** What one kind sounds like now: no voice at all while it is off. */
 export const voicingOf = (session: Session, kind: StreamKind): Voicing => ({
   voice: match(session.settings.config.voices[kind])
     .with({ enabled: false }, () => undefined)
     .otherwise((voice) => voice)
 })
 
-/** The device this session asks for. Nothing enabled means no process at all. */
 export const deviceOf = (session: Session): Device => ({
   muted: silent(session)
 })
@@ -64,10 +51,7 @@ const flags = (
   tool: of('tool')
 })
 
-/**
- * The enabled flags a voice command asks for, read against what is configured
- * now. The answer is what gets written: the file is the only place they live.
- */
+/** The answer is what gets written: the file is the only place they live. */
 export const enablement = (
   session: Session,
   intent: VoiceIntent
@@ -100,7 +84,6 @@ const summary = ({ preset, source, problems }: LoadedSettings): string =>
     ...problems
   ].join(' | ')
 
-/** The one place session state changes, and it changes by returning a new one. */
 export const reduce = (session: Session, event: SessionEvent): Session =>
   match(event)
     .with({ type: 'loaded' }, ({ settings }) => ({

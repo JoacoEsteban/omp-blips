@@ -4,13 +4,6 @@
  * summary of that fit, not a copy of the recording - `vocal.ts` still renders
  * every sample at request time from these controls.
  *
- * The file is one exported value, built through the constructors of
- * `curve.ts` and `vocal.ts`. Each of them pairs the measurements with the
- * grid they were taken on, so no two lists here have to be kept in step by
- * hand: `atKnots` checks every harmonic row against the shared time grid,
- * `measured` derives its knots from the count of values, `spread` and
- * `band` derive theirs from the values themselves.
- *
  * The measurement behind the harmonic curves: 14th-order LPC (bandwidth-
  * expanded to damp narrow-window numerical spikes), 24 ms Hamming windows
  * every 6 ms, spectral envelope read at each harmonic's instantaneous
@@ -53,7 +46,6 @@ export const sansProfile: VocalProfile = {
     slopeHzPerSecond: 130.3714
   },
 
-  /** One curve for each harmonic from the first, relative to the fundamental. */
   harmonics: [
     atKnots([
       1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
@@ -189,7 +181,6 @@ export const sansProfile: VocalProfile = {
     ])
   ],
 
-  /** Harmonics above this take their weight from `upper.bands` instead. */
   cutoffHz: 5200,
 
   /**
@@ -208,10 +199,6 @@ export const sansProfile: VocalProfile = {
     -1.2034, -1.2971, 1.9845, -0.2711, 0.0921, 1.0395, 1.7211, 0.2757
   ],
 
-  /**
-   * The brighter runs above `cutoffHz`, which keep their approved balance
-   * through fixed weights instead of measured curves.
-   */
   upper: {
     bands: [
       band(

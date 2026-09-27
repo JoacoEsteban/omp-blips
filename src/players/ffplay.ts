@@ -73,7 +73,6 @@ interface Device {
   readonly close: () => void
 }
 
-/** Spawn `ffplay` reading raw PCM from its standard input. */
 const openDevice = (): Device => {
   const child = spawn('ffplay', FFPLAY_ARGS, {
     stdio: ['pipe', 'ignore', 'ignore']
@@ -122,12 +121,6 @@ const asMixerEvent = (command: PlayCommand): MixerEvent =>
     .with({ type: 'flush' }, (): MixerEvent => ({ type: 'flush' }))
     .exhaustive()
 
-/**
- * The mix as a stream of PCM blocks: commands and a 10 ms clock fold into the
- * mixer state, and every state that produced audio hands its block on. The
- * stream ends when nothing rings and no further command can arrive.
- */
-
 const blocks = (
   idleMs: number,
   commands: Observable<PlayCommand>
@@ -146,7 +139,6 @@ const blocks = (
     )
   })
 
-/** One open device for as long as there is audio to write to it. */
 const session = (
   idleMs: number,
   commands: Observable<PlayCommand>

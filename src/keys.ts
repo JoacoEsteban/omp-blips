@@ -1,9 +1,5 @@
 import { match, P } from 'ts-pattern'
 
-/**
- * A keystroke the tuner understands. Anything else arrives as the character it
- * typed, so a component matches on letters without decoding escapes itself.
- */
 export type Key =
   | 'up'
   | 'down'
@@ -16,7 +12,6 @@ export type Key =
 
 const ESCAPE = '\u001b'
 const DELETE = '\u007f'
-/** The lowest codepoint that stands for a character rather than a control. */
 const FIRST_PRINTABLE = 0x20
 
 /** Cursor keys, in both the normal and the application form, with modifiers. */
@@ -44,7 +39,6 @@ const codepointOf = (code: string): Key | undefined =>
     .when(Number.isNaN, () => undefined)
     .otherwise((point): Key => ({ char: String.fromCodePoint(point) }))
 
-/** One typed character, once every escape sequence is accounted for. */
 const printableOf = (data: string): Key | undefined =>
   match([...data])
     .with([P.select(P.string)], (char) =>
@@ -65,7 +59,6 @@ const sequenceOf = (rest: string): Key | undefined =>
         .otherwise(() => undefined)
     )
 
-/** `undefined` for input the tuner has no use for, such as a paste or a mouse report. */
 export const keyOf = (data: string): Key | undefined =>
   match(data)
     .with('\r', '\n', (): Key => 'enter')

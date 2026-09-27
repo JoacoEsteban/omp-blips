@@ -6,7 +6,6 @@ import { match, P } from 'ts-pattern'
 import { loadSettings, saveVoices, settingsPath } from './settings.ts'
 import type { SpatialConfig } from './spatial.ts'
 
-/** Runs `read` against a profile directory whose config file holds `raw`. */
 const withConfig = <T>(raw: string | object, read: () => T): T => {
   const contents = match(raw)
     .with(P.string, (text) => text)

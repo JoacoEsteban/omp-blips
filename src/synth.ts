@@ -28,13 +28,8 @@ export const RELEASE_FRAMES = Math.max(
 export type Material =
   'wood' | 'stone' | 'ceramic' | 'glass' | 'reed' | 'brass' | VocalMaterial
 
-/** Materials rendered from a `VocalProfile` instead of the modal path. */
 export type VocalMaterial = 'vocal'
 
-/**
- * One profile for each vocal material. Another voice is an entry here and a
- * data file; the renderer stays as it is.
- */
 const VOCAL_PROFILES: Readonly<Record<VocalMaterial, VocalProfile>> = {
   vocal: sansProfile
 }
@@ -91,11 +86,6 @@ interface Tract {
   readonly sweep: number
 }
 
-/**
- * The generic sustained materials are a source and a filter, the way a voice
- * is: a harmonic source at the pitch, shaped by fixed-Hz resonances. The
- * dedicated `vocal` material uses its own procedural renderer.
- */
 const TRACTS: Readonly<Record<'reed' | 'brass', Tract>> = {
   // Close and narrow: odd harmonics only, under a low first resonance and a
   // second one that barely moves. The darker of the two.
@@ -123,7 +113,6 @@ const TRACTS: Readonly<Record<'reed' | 'brass', Tract>> = {
   }
 }
 
-/** Magnitude of one two-pole resonance at a frequency. */
 export const resonance = (hz: number, formant: Formant): number =>
   (formant.gain * (formant.hz * formant.bw)) /
   Math.sqrt((formant.hz ** 2 - hz ** 2) ** 2 + (hz * formant.bw) ** 2)
@@ -195,12 +184,10 @@ const MATERIAL_MODES: Readonly<
   ]
 }
 
-/** A sound rendered by the generic modal path; a vocal material never reaches it. */
 export type ModalSound = Sound & {
   readonly material: Exclude<Material, VocalMaterial>
 }
 
-/** The partials of one generic modal sound, struck or sustained. */
 const modesOf = (sound: ModalSound): readonly ResonanceMode[] =>
   match(sound.material)
     .with('reed', 'brass', (name) =>
@@ -225,7 +212,6 @@ const seedFor = (key: string): number => {
   return seed
 }
 
-/** Render restrained modal resonances with a deterministic filtered-noise attack. */
 const renderModalVoice = (sound: ModalSound): Float32Array => {
   const frequency = sound.frequency
   const frames = Math.max(1, Math.round((SAMPLE_RATE * sound.toneMs) / 1000))
@@ -328,11 +314,6 @@ const renderModalVoice = (sound: ModalSound): Float32Array => {
   return samples
 }
 
-/**
- * Dispatch a sound to its vocal profile or to the generic modal renderer.
- * `.narrow()` drops the handled materials from the input, so the modal path
- * keeps its narrower type without a second pattern.
- */
 const renderVoice = (sound: Sound): Float32Array =>
   match(sound)
     .with({ material: 'vocal' }, (vocal) =>
@@ -344,7 +325,6 @@ const renderVoice = (sound: Sound): Float32Array =>
 export const soundKey = (sound: Sound): string =>
   `${SOUND_VERSION}:${String(sound.frequency)}:${String(sound.toneMs)}:${String(sound.decay)}:${String(sound.swell)}:${String(sound.hold)}:${String(sound.glide)}:${String(sound.color)}:${sound.material}:${sound.touch}`
 
-/** Cached voice for a complete sound identity. */
 export const voice = (sound: Sound): Float32Array => {
   const key = soundKey(sound)
   const cached = voices.get(key)

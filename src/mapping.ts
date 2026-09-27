@@ -1,10 +1,5 @@
-/**
- * How a character's alphabet index is folded into the scale slots available to
- * a voice. Named presets so a voice can pick its melodic behaviour.
- */
 export type MappingName = 'wrap' | 'fold'
 
-/** `index` is the character's position in the alphabet, `slots` is `scale.length * octaves`. */
 export type Mapping = (index: number, slots: number) => number
 
 /**

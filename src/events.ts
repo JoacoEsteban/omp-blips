@@ -11,29 +11,21 @@ import type { Surface } from './tuner.ts'
 export type NoticeLevel = 'info' | 'warning'
 export type Notify = (message: string, level: NoticeLevel) => void
 
-/** How a request is answered. */
 export interface Caller {
   readonly notify: Notify
 }
 
 export interface Invocation extends Caller {
-  /** Everything typed after `/blips`. */
   readonly args: string
-  /** The terminal the command was typed into, when it is an interactive one. */
   readonly surface: Surface | undefined
 }
 
-/** The `/blips` command, described by pure functions the shell registers. */
 export interface CommandSpec {
   readonly name: string
   readonly description: string
   readonly completions: (argumentPrefix: string) => Completion[] | null
 }
 
-/**
- * The imperative shell. Every callback the host offers becomes an observable
- * here and nowhere else, so the rest of the extension only ever sees streams.
- */
 export interface ExtensionStreams {
   readonly started: Observable<Caller>
   readonly invoked: Observable<Invocation>

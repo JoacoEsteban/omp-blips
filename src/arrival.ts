@@ -6,26 +6,16 @@
  * metronome walking a string.
  */
 export interface Arrival {
-  /** Graphemes this delta carries. */
   readonly chars: number
-  /** Milliseconds to wait before it lands. */
   readonly waitMs: number
 }
 
-/** Graphemes in an average delta. A token is about this long. */
 const MEAN_CHARS = 4
 /** No provider hands over a paragraph in one delta. */
 const MAX_CHARS = 12
 /** How far a gap strays from the nominal one, as a fraction of it. */
 const JITTER = 0.5
 
-/**
- * One delta, sized and scheduled. Sizes fall off geometrically: most deltas
- * carry a word or less, a few carry a clause, and none grows past what a real
- * delta holds. The gap jitters symmetrically around the one the rate asks for,
- * so a long reading still averages `charsPerSecond` and the speed the picker
- * reports stays the speed it delivers.
- */
 export const arrivalOf = (
   charsPerSecond: number,
   draw: () => number

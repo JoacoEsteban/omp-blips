@@ -19,18 +19,12 @@ export interface UpperBand {
   readonly weights: readonly number[]
 }
 
-/** A run of upper harmonics starting at `from`; one weight for each harmonic. */
 export const band = (
   from: number,
   trim: number,
   weights: readonly number[]
 ): UpperBand => ({ from, trim, weights })
 
-/**
- * Everything the renderer needs that is particular to one fitted voice. A
- * profile is data: `vocal-profile.ts` holds the Sans fit, and another voice
- * is another value of this shape, not another renderer.
- */
 export interface VocalProfile {
   /** The base frequency the whole profile was measured at. */
   readonly frequency: number
@@ -71,7 +65,6 @@ const TOUCH_ATTACK_MS: Readonly<Record<Touch, number>> = {
   firm: 5
 }
 
-/** The envelope of a harmonic the profile has no measurement for. */
 const SILENT = constant(0)
 /** The upper band takes its level from its fixed weight, not from a curve. */
 const FIXED = constant(1)
@@ -79,7 +72,6 @@ const FIXED = constant(1)
 interface VocalPartial {
   readonly ratio: number
   readonly gain: number
-  /** This harmonic's level over the tone, relative to the fundamental. */
   readonly envelope: Curve
   readonly isUpper: boolean
   phase: number

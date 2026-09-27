@@ -7,7 +7,6 @@ import type { Sample, Samples } from './samples.ts'
 import { loadSettings } from './settings.ts'
 import { advanced, presetOf, stepped, tuningOf, type Tuning } from './tuner.ts'
 
-// No config file: the tuner sees the presets as they ship.
 process.env['PI_CODING_AGENT_DIR'] = mkdtempSync(join(tmpdir(), 'omp-blips-'))
 
 const samples: Samples = {
@@ -18,7 +17,6 @@ const opened = (): Tuning => tuningOf(samples, 'default')
 
 const LAST = PRESET_NAMES[PRESET_NAMES.length - 1] ?? 'default'
 
-/** Reads the tuning out of a step that was not meant to close the dialog. */
 const tuningOfStep = (tuning: Tuning, key: 'up' | 'down' | 'left'): Tuning => {
   const step = stepped(tuning, key, samples)
   if (step.type !== 'tune') throw new Error(`${key} closed the tuner`)

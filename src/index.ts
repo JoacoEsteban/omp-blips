@@ -47,7 +47,6 @@ import {
 } from './stream.ts'
 import { createTuner, type Surface, type Tuner } from './tuner.ts'
 
-/** Something the user asked of the session, plus how to answer it. */
 interface Ask {
   readonly intent: Intent
   readonly notify: Notify
@@ -58,19 +57,16 @@ interface Ask {
   readonly surface: Surface | undefined
 }
 
-/** An ask the session can fold, once the tuner has had its say. */
 interface Request extends Omit<Ask, 'intent'> {
   readonly intent: Settled
 }
 
-/** What the UI is told about one request. */
 interface Answer {
   readonly notify: Notify
   readonly text: string
   readonly level: NoticeLevel
 }
 
-/** One turn of the fold: the session that a request produced, and its answer. */
 interface Step {
   readonly session: Session
   readonly answer: Answer | undefined
@@ -91,16 +87,11 @@ const stepOf = (step: Step, request: Request): Step => {
   return { session, answer: answerFor(request, session) }
 }
 
-/**
- * The preset the tuner came back with is the command the user would otherwise
- * have typed, so it joins the same fold as every other request.
- */
 const kept = (preset: PresetName | undefined): Settled =>
   match(preset)
     .with(P.nullish, (): Settled => ({ type: 'say', text: 'preset unchanged' }))
     .otherwise((name): Settled => ({ type: 'preset', name }))
 
-/** The one intent that has to reach the user before the session can fold it. */
 const settled = (ask: Ask, tuner: Tuner): Observable<Settled> =>
   match(ask.intent)
     .with({ type: 'tune' }, () =>
@@ -115,7 +106,6 @@ const settled = (ask: Ask, tuner: Tuner): Observable<Settled> =>
     )
     .otherwise((intent) => of(intent))
 
-/** The tuner holds the device open while it auditions a preset. */
 const deviceFor = ([device, tuning]: readonly [Device, boolean]): Device => ({
   muted: device.muted && !tuning
 })
@@ -191,7 +181,6 @@ export default function blips(pi: ExtensionAPI): void {
   const silenced = merge(interrupted, io.ended.pipe(filter(stoppedEarly)))
   const restart = merge(interrupted, io.ended)
 
-  /** One grid for the three voices, so they lock to each other. */
   const ticks = gridFrom(
     session.pipe(map((current) => current.settings.config.tickHz))
   )

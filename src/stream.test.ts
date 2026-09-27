@@ -33,8 +33,6 @@ test('message boundaries preserve the grid phase and discard unread text', () =>
   chunks.next({ kind: 'thinking', delta: 'cd' })
   for (let index = 2; index <= 7; index += 1) ticks.next(tick(index))
 
-  // The phase belongs to the grid, not to the message: the divisor of three
-  // keeps sounding on ticks 0, 3 and 6, and the unread `b` is gone.
   expect(sounded).toEqual([
     { at: 0, char: 'a' },
     { at: 150, char: 'c' },

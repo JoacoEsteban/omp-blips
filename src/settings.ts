@@ -121,7 +121,6 @@ const settingsSchema = z
 
 export type BlipSettings = z.infer<typeof settingsSchema>
 
-/** The one config file. `$PI_CODING_AGENT_DIR` selects another profile. */
 export const settingsPath = (): string =>
   join(
     process.env['PI_CODING_AGENT_DIR'] ?? join(homedir(), '.omp', 'agent'),
@@ -130,11 +129,8 @@ export const settingsPath = (): string =>
 
 export interface LoadedSettings {
   readonly config: BlipConfig
-  /** The preset the config was built on. */
   readonly preset: PresetName
-  /** The file the config was read from, when there was a readable one. */
   readonly source: string | undefined
-  /** Human-readable reasons the file was ignored; never thrown. */
   readonly problems: readonly string[]
 }
 
@@ -181,7 +177,6 @@ const mergeVoice = (
   spatial: patch.spatial ?? base.spatial
 })
 
-/** Lay a patch over a full config. Presets and config files take the same path. */
 export const applyPatch = (
   base: BlipConfig,
   patch: ConfigPatch
@@ -194,28 +189,18 @@ export const applyPatch = (
   }
 })
 
-/** The file as it is on disk; `undefined` when there is no file at all. */
 const currentSettings = (path: string): BlipSettings | string | undefined =>
   match(existsSync(path))
     .with(false, () => undefined)
     .with(true, () => readSettings(path))
     .exhaustive()
 
-/** What one read of the file amounts to, before a preset is laid under it. */
 interface Read {
   readonly source: string | undefined
   readonly problems: readonly string[]
   readonly patch: BlipSettings
 }
 
-/**
- * Defaults, then the preset, then the config file. A malformed or
- * unknown-keyed file is reported and skipped rather than silently
- * half-applied, so a typo never leaves you guessing at the sound.
- *
- * `preset` overrides the name the file asks for; the scripts audition a preset
- * that way without writing anything.
- */
 export const loadSettings = (preset?: PresetName): LoadedSettings => {
   const path = settingsPath()
 
@@ -266,12 +251,6 @@ const writeSettings = (
     .with(P.instanceOf(Error), (error) => `${path}: ${error.message}`)
     .otherwise(() => undefined)
 
-/**
- * A command edits the file instead of holding a session-only override, so the
- * next session starts where this one left off. A file that does not parse is
- * left untouched: rewriting it would throw away what was typed by hand.
- * Returns the reason when nothing was written.
- */
 const save = (
   change: (current: BlipSettings) => BlipSettings
 ): string | undefined => {
@@ -284,7 +263,6 @@ const save = (
 
 type VoiceSettings = NonNullable<BlipSettings['voices']>
 
-/** Named keys rather than a computed one, so the strict shape is kept. */
 const withEnabled = (
   voices: VoiceSettings,
   kind: StreamKind,
@@ -299,7 +277,6 @@ const withEnabled = (
     .with('tool', () => ({ ...voices, tool: { ...voices.tool, enabled } }))
     .exhaustive()
 
-/** Writes only the voices the user asked about; the rest of the file stays. */
 export const saveVoices = (
   enabled: Readonly<Partial<Record<StreamKind, boolean>>>
 ): string | undefined =>

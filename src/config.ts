@@ -7,10 +7,8 @@ import type { Material, Touch } from './synth.ts'
 
 export const STREAM_KINDS = ['text', 'thinking', 'tool'] as const
 
-/** Which part of the assistant stream a blip came from. */
 export type StreamKind = (typeof STREAM_KINDS)[number]
 
-/** Voicing for one stream kind, so the three are audibly distinguishable. */
 export interface VoiceConfig {
   readonly enabled: boolean
   /**
@@ -32,31 +30,18 @@ export interface VoiceConfig {
    * text and spends resolution to do it.
    */
   readonly catchup: number
-  /** Length of a single tone, in milliseconds. */
   readonly toneMs: number
-  /** Multiplier for the material's modal decay rate; lower values ring longer. */
   readonly decay: number
-  /** Fraction of the tone spent rising to full level; 0 leaves the touch's attack. */
   readonly swell: number
-  /** Fraction of the tone held at full body before the decay starts, 0..1. */
   readonly hold: number
-  /** Semitones the pitch falls across a single tone; 0 is a steady pitch. */
   readonly glide: number
-  /** Output gain, 0..1. */
   readonly volume: number
-  /** Material for this stream. */
   readonly material: Material
-  /** How a character index becomes a colour for sustained materials. */
   readonly color: ColorConfig
-  /** Strike force for this stream. */
   readonly touch: Touch
-  /** Frequency of index 0, and the whole of a `drone` voice. */
   readonly baseFrequency: number
-  /** How characters become indices: what is voiced, what is silent, what an index is. */
   readonly reading: ReadingConfig
-  /** How an index becomes a frequency. */
   readonly pitch: PitchConfig
-  /** Where this stream's tones sit in the stereo field. */
   readonly spatial: SpatialConfig
 }
 
@@ -70,12 +55,10 @@ export interface BlipConfig {
   readonly voices: Record<StreamKind, VoiceConfig>
 }
 
-/** A partial voice, as a preset or a config file supplies it. */
 export type VoicePatch = {
   readonly [K in keyof VoiceConfig]?: VoiceConfig[K] | undefined
 }
 
-/** A partial config: presets and config files are both this shape. */
 export interface ConfigPatch {
   readonly tickHz?: number | undefined
   readonly voices?:
@@ -85,8 +68,6 @@ export interface ConfigPatch {
 export const defaultConfig: BlipConfig = {
   tickHz: 20,
   voices: {
-    // Prose: mid register, the voice the ear tracks. Every other tick, so it
-    // sits at half the grid and the other two read against it.
     text: {
       enabled: true,
       divisor: 2,
@@ -111,8 +92,6 @@ export const defaultConfig: BlipConfig = {
       },
       spatial: { placement: { kind: 'fixed', at: 0 } }
     },
-    // Reasoning: a darker voice below the prose. 110 Hz fundamentals are easy to
-    // lose on laptop speakers, so it sits at 146.83 Hz (D3) with more gain.
     thinking: {
       enabled: true,
       divisor: 3,
@@ -137,8 +116,6 @@ export const defaultConfig: BlipConfig = {
       },
       spatial: { placement: { kind: 'fixed', at: 0 } }
     },
-    // Tool arguments: short, bright ticks on every beat of the grid. Dense
-    // JSON, so the cursor takes a long stride and each tick stands for more.
     tool: {
       enabled: true,
       divisor: 1,

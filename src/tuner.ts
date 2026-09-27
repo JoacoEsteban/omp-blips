@@ -38,7 +38,6 @@ const DEFAULT_DELAY_MS = 10
 /** A provider that delivers faster than this is not one you will meet. */
 const MIN_DELAY_MS = 4
 const MAX_DELAY_MS = 1_000
-/** Positions on the speed slider, from the slowest delay to the fastest. */
 const SPEED_STEPS = 50
 const PRESET_ROWS = 7
 const PREVIEW_ROWS = 3
@@ -47,27 +46,19 @@ const PREVIEW_LIMIT = 600
 const NAME_WIDTH = 11
 const LABEL_WIDTH = 7
 
-/**
- * Everything the tuner shows, as one value. The preset under the cursor is the
- * one being heard; nothing is written until the user keeps it.
- */
 export interface Tuning {
   readonly presetIndex: number
-  /** What that preset amounts to once the config file is laid over it. */
   readonly config: BlipConfig
   /** The preset the config file names today. */
   readonly saved: PresetName
-  /** The voice being auditioned. */
   readonly kind: StreamKind
   readonly sample: Sample
   readonly speedIndex: number
   readonly offset: number
-  /** The tail of the sample, as it has been read so far. */
   readonly streamed: string
   readonly paused: boolean
 }
 
-/** What a keystroke leaves behind: a new tuning, or an answer. */
 export type Step =
   | { readonly type: 'tune'; readonly tuning: Tuning }
   /** The dialog is over; a preset means keep it, nothing means leave the file alone. */
@@ -98,7 +89,6 @@ const speedFor = (delayMs: number): number =>
 
 const DEFAULT_SPEED_INDEX = speedFor(DEFAULT_DELAY_MS)
 
-/** The list is a tuple, but an index into it is still an optional read. */
 const presetAt = (index: number): PresetName => PRESET_NAMES[index] ?? 'default'
 
 export const presetOf = (tuning: Tuning): PresetName =>
@@ -110,14 +100,12 @@ const configFor = (preset: PresetName): BlipConfig =>
 const voiceOf = (tuning: Tuning): VoiceConfig =>
   tuning.config.voices[tuning.kind]
 
-/** A voice that is switched off in the config file is silent here too. */
 const voicingFor = (tuning: Tuning): Voicing => ({
   voice: match(voiceOf(tuning))
     .with({ enabled: false }, () => undefined)
     .otherwise((voice): VoiceConfig | undefined => voice)
 })
 
-/** Nothing to read, or nothing to read from: either way the stream stops. */
 interface Clock {
   readonly paused: boolean
   /** Graphemes a second, averaged over the deltas the reading arrives in. */
@@ -135,7 +123,6 @@ const clockFor = (tuning: Tuning): Clock => ({
 const sameClock = (left: Clock, right: Clock): boolean =>
   left.paused === right.paused && left.charsPerSecond === right.charsPerSecond
 
-/** A new reading of the same text: the preview and the blip count start over. */
 const rewound = (tuning: Tuning): Tuning => ({
   ...tuning,
   offset: 0,
@@ -145,7 +132,6 @@ const rewound = (tuning: Tuning): Tuning => ({
 const resampled = (tuning: Tuning, samples: Samples): Tuning =>
   rewound({ ...tuning, sample: samples.of(tuning.kind, tuning.sample) })
 
-/** The cursor walks the list and the audition follows it, config file and all. */
 const moved = (tuning: Tuning, delta: number): Tuning => {
   const presetIndex = cycle(tuning.presetIndex, delta, PRESET_NAMES.length)
   return { ...tuning, presetIndex, config: configFor(presetAt(presetIndex)) }
@@ -153,7 +139,6 @@ const moved = (tuning: Tuning, delta: number): Tuning => {
 
 const kindAt = (index: number): StreamKind => STREAM_KINDS[index] ?? 'text'
 
-/** Another voice reads another kind of text, so the sample is replaced with it. */
 const voiced = (tuning: Tuning, delta: number, samples: Samples): Tuning =>
   resampled(
     {
@@ -188,7 +173,6 @@ export const stepped = (tuning: Tuning, key: Key, samples: Samples): Step =>
     .with({ char: ']' }, () => tuned(sped(tuning, 1)))
     .otherwise(() => tuned(tuning))
 
-/** One character leaves the sample; an exhausted sample is replaced by the next. */
 interface Advance {
   readonly tuning: Tuning
   readonly char: string
@@ -214,17 +198,11 @@ export const advanced = (tuning: Tuning, samples: Samples): Advance => {
   }
 }
 
-/** One delta: the graphemes it carries, and the reading it leaves behind. */
 export interface Delta {
   readonly tuning: Tuning
   readonly text: string
 }
 
-/**
- * A provider hands over several graphemes at once, so the picker does too. The
- * buffer downstream is what turns that burst back into an even line of blips,
- * which is the behaviour worth hearing before a preset is kept.
- */
 export const drained = (
   tuning: Tuning,
   samples: Samples,
@@ -273,7 +251,6 @@ const wrapped = (text: string, width: number): readonly string[] => {
   return rows
 }
 
-/** What the reading answers: the note a character carries, not how often. */
 const readingLabel = (reading: ReadingConfig): string =>
   match(reading)
     .with({ kind: 'codepoint' }, ({ span }) => `codepoint ${String(span)}`)
@@ -300,7 +277,6 @@ const colorLabel = (color: ColorConfig): string =>
     .with({ kind: 'vowel' }, ({ span }) => `${String(span)} vowels`)
     .exhaustive()
 
-/** The rows of the preset list, kept around the cursor. */
 const windowOf = (index: number): readonly number[] => {
   const rows = Math.min(PRESET_ROWS, PRESET_NAMES.length)
   const first = clamp(
@@ -431,7 +407,6 @@ export const view = (
   ]
 }
 
-/** The part of the host UI the tuner needs: one focused component. */
 export interface Surface {
   readonly custom: <T>(
     factory: (
@@ -443,23 +418,17 @@ export interface Surface {
   ) => Promise<T>
 }
 
-/** Structural stand-in for pi-tui's `Component`, which is a transitive type. */
 interface Component {
   readonly render: (width: number) => readonly string[]
   readonly handleInput: (data: string) => void
   readonly dispose: () => void
 }
 
-/** One open dialog: the model, and the generators that feed it. */
 interface Open {
   readonly tuning: Tuning
   readonly samples: Samples
 }
 
-/**
- * The tuner as the rest of the extension sees it: a sound it makes while it is
- * open, and a preset it comes back with.
- */
 export interface Tuner {
   /** The audition, on a grid of its own so the preset's tempo is heard. */
   readonly audition: Observable<PlayCommand>
@@ -494,7 +463,6 @@ export const createTuner = (): Tuner => {
     distinctUntilChanged()
   )
 
-  /** The one place the model moves on its own: a delta leaves the sample. */
   const spend = ({ chars }: Arrival): string =>
     match(state.getValue())
       .with(P.nullish, () => '')
@@ -514,8 +482,6 @@ export const createTuner = (): Tuner => {
     switchMap((clock) =>
       match(clock.paused)
         .with(true, () => EMPTY)
-        // Each delta is drawn as it is needed, so no two land alike: the size
-        // decides the wait, and `repeat` asks for the next one.
         .with(false, () =>
           defer(() => {
             const arrival = arrivalOf(clock.charsPerSecond, Math.random)

@@ -24,28 +24,20 @@ export interface Completion {
   readonly hint?: string
 }
 
-/** What the user asked for, before anything is read from or written to disk. */
 export type Intent =
   | VoiceIntent
   | { readonly type: 'preset'; readonly name: string }
   | { readonly type: 'presets' }
   | { readonly type: 'reload' }
   | { readonly type: 'where' }
-  /** Pick a preset by ear; the answer is whatever the tuner comes back with. */
   | { readonly type: 'tune' }
-  /** Nothing to change; the answer is the message itself. */
   | { readonly type: 'say'; readonly text: string }
 
-/**
- * An intent the session can answer on its own. `tune` is the one intent that
- * has to go through the user first, so it never reaches the fold.
- */
 export type Settled = Exclude<Intent, { readonly type: 'tune' }>
 
 interface Subcommand {
   readonly name: string
   readonly description: string
-  /** Set when a further word follows the name; says how to complete it. */
   readonly argument?: {
     readonly hint: string
     readonly complete: (prefix: string) => readonly Completion[]
@@ -56,7 +48,6 @@ interface Subcommand {
 const presetList = (): string =>
   PRESET_NAMES.map((key) => `${key} — ${presets[key].description}`).join('\n')
 
-/** Second-level items repeat their subcommand: the chosen `value` replaces the whole argument. */
 const presetCompletions = (prefix: string): readonly Completion[] =>
   PRESET_NAMES.filter((name) => name.startsWith(prefix)).map((name) => ({
     value: `preset ${name}`,
@@ -64,7 +55,6 @@ const presetCompletions = (prefix: string): readonly Completion[] =>
     description: presets[name].description
   }))
 
-/** One table drives the intents, the usage line, and the dropdown. */
 const SUBCOMMANDS: readonly Subcommand[] = [
   {
     name: 'on',
@@ -169,7 +159,6 @@ export const completions = (argumentPrefix: string): Completion[] | null =>
     .with([], () => null)
     .otherwise((found) => [...found])
 
-/** Everything after `/blips `, split into the subcommand word and the rest. */
 const split = (args: string): readonly [string, string] =>
   match(/^(\S+)\s*(.*)$/s.exec(args.trim()))
     .with(
@@ -200,10 +189,6 @@ const named = (name: string): PresetName | undefined =>
   PRESET_NAMES.find((candidate) => candidate === name)
 
 /**
- * The one impure step of the session fold: a command reads the config file,
- * and a command that changes something writes it first. Everything downstream
- * of here is a pure value.
- *
  * A write that fails changes nothing, so its reason is the whole answer.
  */
 export const interpret = (intent: Settled, session: Session): SessionEvent =>

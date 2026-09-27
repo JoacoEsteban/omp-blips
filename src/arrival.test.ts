@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test'
 import { arrivalOf } from './arrival.ts'
 
-/** A generator with a seed, so a run of draws is the same every time. */
 const seeded = (seed: number): (() => number) => {
   let state = seed
   return () => {

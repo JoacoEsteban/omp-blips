@@ -1,16 +1,13 @@
 import { match } from 'ts-pattern'
 import type { StreamKind } from './config.ts'
 
-/** How many empty generations the tool sample survives before it gives up. */
 const CALL_ATTEMPTS = 8
 
-/** Text to read, or the reason there is none. */
 export interface Sample {
   readonly text: string
   readonly problem: string
 }
 
-/** A fresh sample for one voice, given the one it replaces. */
 export interface Samples {
   readonly of: (kind: StreamKind, previous: Sample) => Sample
 }

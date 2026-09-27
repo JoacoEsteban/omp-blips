@@ -1,5 +1,4 @@
 /**
- * Plays the same phrase through every preset, in order, so you can pick one.
  * Usage: bun run scripts/audition.ts "some text" [text|thinking|tool]
  */
 import {
@@ -17,7 +16,6 @@ import { PRESET_NAMES, presets } from '../src/presets.ts'
 import { loadSettings } from '../src/settings.ts'
 import { playText } from './play.ts'
 
-/** Silence between two presets, so they do not run together. */
 const GAP_MS = 700
 
 const text = process.argv[2] ?? 'the quick brown fox jumps over the lazy dog'

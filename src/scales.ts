@@ -1,8 +1,3 @@
-/**
- * Semitone offsets of one octave. Each scale uses five or six notes to leave
- * different intervals between reachable notes. Modal partials can add color.
- */
-
 /** Bright and neutral. The sound most ears read as "melody". */
 export const MAJOR_PENTATONIC = [0, 2, 4, 7, 9] as const
 

@@ -9,19 +9,9 @@ const CODE_SPACE = 32
 
 const LETTER_COUNT = CODE_LOWER_Z - CODE_LOWER_A + 1
 const VOWELS = 'aeiou'
-/** The marks that end a sentence, for readings that follow phrasing. */
 const TERMINALS = '.!?'
 const WHITESPACE = /\s/u
 
-/**
- * How a voice reads a character: which ones are voiced, which ones are silent,
- * and what index a voiced one carries. The index means nothing on its own —
- * `pitch.ts` decides what it sounds like.
- *
- * The rate does not belong here. A reading answers what a character is; the
- * shared grid and the voice's `stride` answer when it is heard and how much
- * text one blip stands for.
- */
 export type ReadingConfig =
   | { readonly kind: 'alphabet' }
   | { readonly kind: 'codepoint'; readonly span: number }
@@ -38,7 +28,6 @@ export interface Reading {
   readonly read: (char: string) => readonly [Reading, number | undefined]
 }
 
-/** A reading with no memory: the cursor after a character is the cursor before it. */
 abstract class Memoryless implements Reading {
   protected abstract indexOf(char: string): number | undefined
 
@@ -179,7 +168,6 @@ class Phrase implements Reading {
   }
 }
 
-/** The cursor a voice starts from, and returns to whenever its reading changes. */
 export const readingOf = (config: ReadingConfig): Reading =>
   match(config)
     .with({ kind: 'alphabet' }, () => new Alphabet())

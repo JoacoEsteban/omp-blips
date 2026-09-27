@@ -3,7 +3,6 @@ import { SAMPLE_RATE, toInt16, voice } from '../synth.ts'
 import type { SpatialMotion } from '../spatial.ts'
 import type { Tone } from './types.ts'
 
-/** How often the mixer wakes up to top up the pipe. */
 export const TICK_MS = 10
 /** Audio written ahead of the wall clock. Lower is tighter, but underruns crackle. */
 const LEAD_MS = 40
@@ -19,15 +18,13 @@ const FADE_MS = 6
  */
 const MAX_VOICES = 32
 
-/** Samples of write-ahead the mixer maintains. */
 const LEAD_FRAMES = Math.round((LEAD_MS * SAMPLE_RATE) / 1000)
 /** Largest block written in one tick; anything beyond this was starved, not buffered. */
 const MAX_BLOCK_FRAMES =
   LEAD_FRAMES + Math.round((TICK_MS * SAMPLE_RATE) / 1000)
-/** Samples the flush ramp takes to reach zero. */
 const FADE_FRAMES = Math.max(1, Math.round((FADE_MS * SAMPLE_RATE) / 1000))
 
-/** A source with one or two channels. The mixer never duplicates a mono cache. */
+/** The mixer never duplicates a mono cache. */
 export type Source =
   | { readonly kind: 'mono'; readonly samples: Float32Array }
   | {
@@ -36,7 +33,6 @@ export type Source =
       readonly right: Float32Array
     }
 
-/** Two output samples reused by the renderer for every frame. */
 export interface StereoFrame {
   left: number
   right: number
@@ -48,9 +44,9 @@ const sourceLength = (source: Source): number => {
 }
 
 /**
- * Render one source frame into a stereo frame. Stereo input is treated as one
- * positioned source: at either hard edge both input channels remain audible,
- * unlike a balance control which discards one channel.
+ * Stereo input is treated as one positioned source: at either hard edge both
+ * input channels remain audible, unlike a balance control which discards one
+ * channel.
  */
 export const renderSource = (
   source: Source,
@@ -94,23 +90,14 @@ interface Ringing {
   readonly rightGain: number
 }
 
-/**
- * Everything the mixer knows between two events. The state is a value: a step
- * reads one and returns the next, so the mix is a fold over play, flush, and
- * clock events rather than a pile of mutable timers.
- */
 export interface MixerState {
-  /** Wall clock the sample cursor is measured from. */
   readonly openedAt: number
   readonly ringing: readonly Ringing[]
-  /** Samples handed to the device so far. */
   readonly cursor: number
-  /** Wall clock of the last tick, which is where the next block begins. */
   readonly tickedAt: number
   readonly lastToneAt: number
   /** No further tones can arrive: the command stream is finished. */
   readonly ended: boolean
-  /** PCM produced by the step that made this state, if it produced any. */
   readonly block: Buffer | undefined
   /** Nothing rings and nothing more will: the device can be released. */
   readonly done: boolean
@@ -154,7 +141,6 @@ const motionPan = (
   return Math.max(-1, Math.min(1, pan))
 }
 
-/** Age every source by `frames` samples, retiring ended or released voices. */
 const advance = (
   ringing: readonly Ringing[],
   frames: number
@@ -172,7 +158,6 @@ interface Mixed {
   readonly ringing: readonly Ringing[]
 }
 
-/** Sum `frames` samples of the ringing voices into interleaved stereo PCM. */
 const mixBlock = (
   ringing: readonly Ringing[],
   frames: number,
@@ -251,7 +236,6 @@ const releaseAll = (ringing: readonly Ringing[]): readonly Ringing[] =>
     if (sound.release > 0) return sound
     return { ...sound, release: FADE_FRAMES }
   })
-/** Render the bounded tail used when the device is torn down externally. */
 export const releaseMixer = (state: MixerState): Buffer =>
   mixBlock(releaseAll(state.ringing), FADE_FRAMES, state.cursor, state.openedAt)
     .block
@@ -289,8 +273,8 @@ const ticked = (idleMs: number, state: MixerState, at: number): MixerState => {
 }
 
 /**
- * One step of the mix, as a fold. `idleMs` is how much silence releases the
- * device; `Infinity` keeps it for as long as the commands last.
+ * `idleMs` is how much silence releases the device; `Infinity` keeps it for as
+ * long as the commands last.
  */
 export const mixerStep =
   (idleMs: number) =>

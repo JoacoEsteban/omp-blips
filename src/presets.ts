@@ -30,16 +30,10 @@ export const PRESET_NAMES = [
 export type PresetName = (typeof PRESET_NAMES)[number]
 
 export interface Preset {
-  /** One line, shown by `/blips presets`. */
   readonly description: string
   readonly patch: ConfigPatch
 }
 
-/**
- * A preset is a named `ConfigPatch` laid over the defaults, under whatever a
- * config file says. Each one is a different answer to the same question: what
- * should a stream of characters sound like?
- */
 export const presets: Record<PresetName, Preset> = {
   default: {
     description: 'Prose melody, dark reasoning murmur, bright tool ticks.',
@@ -75,8 +69,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // Bright modal tones with small intervals and a fast rate. The 2-character
-  // rate makes prose sound like a text crawl.
   arcade: {
     description:
       'Bright modal tones. Fast, high, small sounds in a text crawl.',
@@ -130,8 +122,6 @@ export const presets: Record<PresetName, Preset> = {
           material: 'ceramic',
           touch: 'firm',
           baseFrequency: 880,
-          // Dense JSON read character by character, semitones apart: an arcade
-          // machine reporting progress, not a melody.
           reading: { kind: 'codepoint', span: 16 },
           pitch: { kind: 'chromatic', span: 7 }
         }
@@ -139,8 +129,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // Long decays overlap into each other. The tone cache makes this cheap,
-  // and the ffplay mixer lets the tails ring together.
   gamelan: {
     description:
       'Struck ceramic and glass. Long ringing tones that overlap into a haze.',
@@ -161,8 +149,6 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'normal',
           baseFrequency: 415.3,
-          // One ring per word, climbing across a sentence and dropping at its
-          // end. The words pace it; nothing samples the letters inside them.
           reading: { kind: 'phrase', span: 4 },
           pitch: {
             kind: 'scalar',
@@ -202,7 +188,6 @@ export const presets: Record<PresetName, Preset> = {
           material: 'ceramic',
           touch: 'firm',
           baseFrequency: 830.61,
-          // One struck pitch under the tails of the other two voices.
           reading: { kind: 'class' },
           pitch: { kind: 'drone' }
         }
@@ -210,8 +195,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // One octave, very sparse, very slow. You stop hearing letters and start
-  // hearing whether the agent is alive.
   sonar: {
     description: 'Submarine. One slow ping each few words, nothing else.',
     patch: {
@@ -235,8 +218,6 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'soft',
           baseFrequency: 174.61,
-          // Vowels only, on one pitch: a ping per few words, and nothing in
-          // between. Consonants would make it a melody again.
           reading: { kind: 'vowels' },
           pitch: { kind: 'drone' }
         },
@@ -286,8 +267,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // Almost no pitch range: the ear reads it as rhythm, not melody. Closest
-  // thing to hearing a person type in the next room.
   typewriter: {
     description: 'Mechanical keys. Near-flat pitch, all rhythm.',
     patch: {
@@ -311,8 +290,6 @@ export const presets: Record<PresetName, Preset> = {
           material: 'wood',
           touch: 'firm',
           baseFrequency: 987.77,
-          // Four character classes over two semitones: the pitch barely moves,
-          // so the ear hears the keys and not the letters.
           reading: { kind: 'class' },
           pitch: { kind: 'chromatic', span: 2 }
         },
@@ -353,7 +330,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // High, sweet, stepwise. `fold` eachwhere, because leaps break the illusion.
   'music-box': {
     description: 'Wind-up music box. High, sweet, stepwise phrases.',
     patch: {
@@ -373,8 +349,6 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'normal',
           baseFrequency: 1046.5,
-          // One note per word, and `step: 1` walks the scale in order: this is
-          // the preset whose whole character is stepwise motion.
           reading: { kind: 'phrase', span: 6 },
           pitch: { kind: 'scalar', scale: KUMOI, octaves: 2, mapping: 'fold' }
         },
@@ -407,8 +381,6 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'normal',
           baseFrequency: 1567.98,
-          // Tool arguments have few word boundaries, so this voice samples
-          // letters instead of following phrases.
           reading: { kind: 'alphabet' },
           pitch: {
             kind: 'scalar',
@@ -421,7 +393,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // For shared rooms and long sessions: prose only, low gain, wide spacing.
   quiet: {
     description: 'Background. Prose only, low gain, wide spacing.',
     patch: {
@@ -443,8 +414,6 @@ export const presets: Record<PresetName, Preset> = {
           volume: 0.14,
           material: 'wood',
           touch: 'soft',
-          // Vowels carry the line; consonants are the noise you do not want in
-          // a shared room.
           reading: { kind: 'vowels' },
           pitch: {
             kind: 'scalar',
@@ -481,9 +450,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // `phrase` with nothing in its way: long tones, a low pace floor, and a wide
-  // drift. One note per word, so the melody is the sentence and the rests are
-  // the words.
   haiku: {
     description: 'One held note per word. Prose becomes a slow melodic line.',
     patch: {
@@ -507,8 +473,6 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'soft',
           baseFrequency: 392,
-          // The widest span of any preset: seven degrees, so the length of a
-          // word reads clearly as the size of a leap.
           reading: { kind: 'phrase', span: 7 },
           pitch: {
             kind: 'scalar',
@@ -534,8 +498,6 @@ export const presets: Record<PresetName, Preset> = {
           volume: 0.24,
           material: 'glass',
           touch: 'soft',
-          // An octave below the text voice, in its mode: this preset is one
-          // instrument with three registers, not three instruments.
           baseFrequency: 196,
           reading: { kind: 'phrase', span: 5 },
           pitch: {
@@ -563,11 +525,6 @@ export const presets: Record<PresetName, Preset> = {
           material: 'glass',
           touch: 'soft',
           baseFrequency: 783.99,
-          // Tool arguments have almost no word boundaries, so this voice
-          // samples letters instead of pretending to have phrases. The rate and
-          // the tone length are set together: what makes this preset sound like
-          // a room is tones overlapping their own tails, and a sparse voice with
-          // short tones stays outside that no matter what scale it uses.
           reading: { kind: 'alphabet' },
           pitch: {
             kind: 'scalar',
@@ -580,9 +537,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // `phrase` against `drone`: the reading keeps the structure and the pitch
-  // throws away each melodic choice. What is left is the raw rhythm of
-  // writing — one beat per word, and the length of each word as silence.
   pulse: {
     description: 'One beat per word, one pitch. The heartbeat of the writing.',
     patch: {
@@ -598,7 +552,6 @@ export const presets: Record<PresetName, Preset> = {
           material: 'wood',
           touch: 'normal',
           baseFrequency: 293.66,
-          // `drone` reads no index, so the drift has nowhere to go.
           reading: { kind: 'phrase', span: 1 },
           pitch: { kind: 'drone' }
         },
@@ -633,9 +586,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // `vowels` is the only reading that thins prose without sampling it: it keeps
-  // each vowel and drops each consonant, which is the part of a word a singer
-  // holds. One octave, so the line never leaps.
   plainchant: {
     description: 'Vowels only, held in one octave. The text sings its spine.',
     patch: {
@@ -694,7 +644,6 @@ export const presets: Record<PresetName, Preset> = {
             mapping: 'fold'
           }
         },
-        // A chant does not tick through JSON.
         tool: {
           spatial: { placement: { kind: 'fixed', at: 0.3 } },
           enabled: false,
@@ -707,9 +656,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // `alphabet` against `chromatic`, one blip per letter and no scale to hide
-  // behind: pitch rises strictly with the alphabet over 26 semitones. Repeated
-  // letters are unmistakable, and you can hear a word being spelled.
   cipher: {
     description: 'A semitone for each letter. You can hear the spelling.',
     patch: {
@@ -779,9 +725,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // `class` against `drone`: the reading voices eachthing except whitespace,
-  // and the pitch refuses to vary. Only the gaps between words carry anything,
-  // which is exactly what a telegraph line sounds like.
   telegraph: {
     description: 'A wire. Every character a tick, only the spaces speak.',
     patch: {
@@ -903,9 +846,6 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // `codepoint` against `chromatic`, with the tool voice at each character:
-  // brackets, quotes and colons all sound, so the shape of a JSON payload is
-  // audible. The one preset that makes tool arguments the main voice.
   hexdump: {
     description: 'Raw bytes. Punctuation sounds, and tool calls lead.',
     patch: {

@@ -18,15 +18,9 @@ import { type Blip, gridFrom, gridPeriodMs, tonesFrom } from '../src/stream.ts'
 /** How long the device stays open after the last character, in tone lengths. */
 const TAIL = 6
 
-/** A text as a character stream, one character every `delayMs`. */
 export const characters = (text: string, delayMs: number): Observable<string> =>
   from(text).pipe(concatMap((char) => timer(delayMs).pipe(map(() => char))))
 
-/**
- * Feed a phrase through the same pitch and playback path as the extension.
- * The observable is the whole run: subscribing starts it, unsubscribing stops
- * it, and it completes once the last tone has rung out.
- */
 export const playText = (
   config: BlipConfig,
   kind: StreamKind,

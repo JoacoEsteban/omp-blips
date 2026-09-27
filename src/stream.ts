@@ -29,28 +29,23 @@ import { spatialOf } from './spatial.ts'
 import { type Reading, type ReadingConfig, readingOf } from './reading.ts'
 import type { Tone } from './players/types.ts'
 
-/** A slice of one stream kind, exactly as the agent delivered it. */
 export interface Chunk {
   readonly kind: StreamKind
   readonly delta: string
 }
 
-/** What one kind sounds like right now. A missing voice is a silenced one. */
 export interface Voicing {
   readonly voice: VoiceConfig | undefined
 }
 
-/** A character that earned a tone. */
 export interface Blip {
   readonly char: string
   readonly tone: Tone
-  /** The moment the grid meant this tone to sound. */
   readonly at: number
 }
 
 type AssistantEvent = MessageUpdateEvent['assistantMessageEvent']
 
-/** Prose, reasoning, and tool arguments all stream as deltas; each gets its own voice. */
 export const chunkOf = (event: AssistantEvent): Chunk | undefined =>
   match(event)
     .with({ type: 'text_delta', delta: P.select(P.string) }, (delta) => ({
@@ -76,7 +71,6 @@ export const isInterrupt = (event: AssistantEvent): boolean =>
     .with({ type: 'error' }, () => true)
     .otherwise(() => false)
 
-/** The same interruption seen from the finished message, in case no `error` event arrived. */
 export const stoppedEarly = (message: MessageEndEvent['message']): boolean =>
   match(message)
     .with(
@@ -88,14 +82,11 @@ export const stoppedEarly = (message: MessageEndEvent['message']): boolean =>
 /** Two tones closer than this are one click, whatever the grid asks for. */
 const MIN_PERIOD_MS = 2
 
-/** The effective period shared by playback and audition scheduling. */
 export const gridPeriodMs = (hz: number): number =>
   Math.max(MIN_PERIOD_MS, 1000 / hz)
 
-/** A grid tick: which one it is, and the moment it was due. */
 export interface Tick {
   readonly index: number
-  /** The moment the grid asked for, not the moment the timer woke up. */
   readonly at: number
 }
 
@@ -146,27 +137,18 @@ const countGraphemes = (text: string): number => {
   return count
 }
 
-/** The last character in a span that the reading gave an index to. */
 interface Sounded {
   readonly char: string
   readonly index: number
 }
 
-/** How far a span took the cursor, and what it left to sound. */
 interface Walked {
   readonly reading: Reading
-  /** Code units consumed, so the caller can drop the prefix it spent. */
-  readonly end: number
   readonly taken: number
+  readonly end: number
   readonly sounded: Sounded | undefined
 }
 
-/**
- * Read `units` graphemes and keep the last index they produced. A span rather
- * than a point, so a stride that lands on a space still sounds what it crossed
- * instead of leaving a hole in the grid. A span of pure whitespace sounds
- * nothing, which is the rest the text asked for.
- */
 const walk = (reading: Reading, text: string, units: number): Walked => {
   let cursor = reading
   let end = 0
@@ -183,17 +165,9 @@ const walk = (reading: Reading, text: string, units: number): Walked => {
   return { reading: cursor, end, taken, sounded }
 }
 
-/**
- * Where one voice has got to. `pending` is the text the cursor has not reached
- * and `backlog` is its length in graphemes, kept alongside so a tick costs the
- * stride and not the whole buffer. `source` is the config the reading came
- * from, so a voice that changes its reading starts a new phrase instead of
- * continuing an old one in a new shape.
- */
 interface Cursor {
   readonly pending: string
   readonly backlog: number
-  /** Never shrink a catch-up stride until the buffer is empty. */
   readonly catchupStride: number
   readonly reading: Reading | undefined
   readonly source: ReadingConfig | undefined
@@ -241,7 +215,6 @@ const toneOf = (
   spatial: spatialOf(selected, ordinal, voice.spatial)
 })
 
-/** One sounding: walk the stride, or more of it when the text got ahead. */
 const drain = (cursor: Cursor, voice: VoiceConfig, at: number): Cursor => {
   const catchupStride = Math.max(
     cursor.catchupStride,
@@ -274,7 +247,6 @@ const drain = (cursor: Cursor, voice: VoiceConfig, at: number): Cursor => {
   }
 }
 
-/** Text arriving and the grid ticking are the only two things that happen. */
 type Pulse =
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'tick'; readonly tick: Tick }
@@ -325,7 +297,6 @@ export const tonesFrom =
       filter((blip): blip is Blip => blip !== undefined)
     )
 
-/** A blip and the stream kind that produced it. */
 export interface Voiced extends Blip {
   readonly kind: StreamKind
 }
