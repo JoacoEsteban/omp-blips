@@ -1,15 +1,18 @@
 import type { Theme } from '@oh-my-pi/pi-coding-agent'
 import {
   BehaviorSubject,
+  defer,
   distinctUntilChanged,
   EMPTY,
   filter,
-  interval,
   map,
   type Observable,
-  switchMap
+  repeat,
+  switchMap,
+  timer
 } from 'rxjs'
 import { match, P } from 'ts-pattern'
+import { type Arrival, arrivalOf } from './arrival.ts'
 import type { ColorConfig } from './color.ts'
 import {
   type BlipConfig,
@@ -114,10 +117,11 @@ const voicingFor = (tuning: Tuning): Voicing => ({
     .otherwise((voice): VoiceConfig | undefined => voice)
 })
 
-/** Nothing to read, or nothing to read from: either way the clock stops. */
+/** Nothing to read, or nothing to read from: either way the stream stops. */
 interface Clock {
   readonly paused: boolean
-  readonly delayMs: number
+  /** Graphemes a second, averaged over the deltas the reading arrives in. */
+  readonly charsPerSecond: number
 }
 
 const clockFor = (tuning: Tuning): Clock => ({
@@ -125,11 +129,11 @@ const clockFor = (tuning: Tuning): Clock => ({
     tuning.paused ||
     tuning.sample.text.length === 0 ||
     tuning.sample.problem.length > 0,
-  delayMs: delayFor(tuning.speedIndex)
+  charsPerSecond: 1000 / delayFor(tuning.speedIndex)
 })
 
 const sameClock = (left: Clock, right: Clock): boolean =>
-  left.paused === right.paused && left.delayMs === right.delayMs
+  left.paused === right.paused && left.charsPerSecond === right.charsPerSecond
 
 /** A new reading of the same text: the preview and the blip count start over. */
 const rewound = (tuning: Tuning): Tuning => ({
@@ -209,6 +213,30 @@ export const advanced = (tuning: Tuning, samples: Samples): Advance => {
       .exhaustive()
   }
 }
+
+/** One delta: the graphemes it carries, and the reading it leaves behind. */
+export interface Delta {
+  readonly tuning: Tuning
+  readonly text: string
+}
+
+/**
+ * A provider hands over several graphemes at once, so the picker does too. The
+ * buffer downstream is what turns that burst back into an even line of blips,
+ * which is the behaviour worth hearing before a preset is kept.
+ */
+export const drained = (
+  tuning: Tuning,
+  samples: Samples,
+  chars: number
+): Delta =>
+  Array.from({ length: chars }).reduce<Delta>(
+    (delta) => {
+      const { tuning: read, char } = advanced(delta.tuning, samples)
+      return { tuning: read, text: `${delta.text}${char}` }
+    },
+    { tuning, text: '' }
+  )
 
 export const tuningOf = (samples: Samples, saved: PresetName): Tuning => {
   const presetIndex = Math.max(PRESET_NAMES.indexOf(saved), 0)
@@ -330,9 +358,9 @@ const voiceRow = (tuning: Tuning, theme: Theme): string =>
 
 const sliderRow = (tuning: Tuning, theme: Theme): string => {
   const filled = Math.round((tuning.speedIndex / SPEED_STEPS) * 12)
-  // The rate is read back off the delay the timer was given, not off the
-  // index, so the number cannot drift from what you are hearing.
-  const rate = 1000 / delayFor(tuning.speedIndex)
+  // The rate comes off the same clock the producer runs on, so the number
+  // cannot drift from what you are hearing.
+  const { charsPerSecond } = clockFor(tuning)
   const state = match(tuning.paused)
     .with(true, () => 'paused')
     .with(false, () => 'streaming')
@@ -340,7 +368,7 @@ const sliderRow = (tuning: Tuning, theme: Theme): string => {
   return labelled(
     theme,
     'speed',
-    `slow ${'━'.repeat(filled)}●${'━'.repeat(12 - filled)} fast  ${rate.toFixed(1)} chars/s  ${state}`
+    `slow ${'━'.repeat(filled)}●${'━'.repeat(12 - filled)} fast  ${charsPerSecond.toFixed(1)} chars/s  ${state}`
   )
 }
 
@@ -466,38 +494,45 @@ export const createTuner = (): Tuner => {
     distinctUntilChanged()
   )
 
-  /** The one place the model moves on its own: a tick spends a character. */
-  const spend = (): string =>
+  /** The one place the model moves on its own: a delta leaves the sample. */
+  const spend = ({ chars }: Arrival): string =>
     match(state.getValue())
       .with(P.nullish, () => '')
       .otherwise((open) => {
-        const { tuning, char } = advanced(open.tuning, open.samples)
+        const { tuning, text } = drained(open.tuning, open.samples, chars)
         state.next({ ...open, tuning })
-        return char
+        return text
       })
 
-  const characters = state.pipe(
+  const deltas = state.pipe(
     map((open) =>
       match(open)
-        .with(P.nullish, (): Clock => ({ paused: true, delayMs: MAX_DELAY_MS }))
+        .with(P.nullish, (): Clock => ({ paused: true, charsPerSecond: 0 }))
         .otherwise(({ tuning }) => clockFor(tuning))
     ),
     distinctUntilChanged(sameClock),
     switchMap((clock) =>
       match(clock.paused)
         .with(true, () => EMPTY)
-        .with(false, () => interval(clock.delayMs))
+        // Each delta is drawn as it is needed, so no two land alike: the size
+        // decides the wait, and `repeat` asks for the next one.
+        .with(false, () =>
+          defer(() => {
+            const arrival = arrivalOf(clock.charsPerSecond, Math.random)
+            return timer(arrival.waitMs).pipe(map(() => arrival))
+          }).pipe(repeat())
+        )
         .exhaustive()
     ),
     map(spend),
-    filter((char) => char.length > 0)
+    filter((text) => text.length > 0)
   )
 
   const audition = active.pipe(
     switchMap((open) =>
       match(open)
         .with(false, () => EMPTY)
-        .with(true, () => characters.pipe(tonesFrom(voicing, gridFrom(tickHz))))
+        .with(true, () => deltas.pipe(tonesFrom(voicing, gridFrom(tickHz))))
         .exhaustive()
     ),
     map(({ tone }) => play(tone))

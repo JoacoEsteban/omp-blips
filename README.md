@@ -85,7 +85,9 @@ event stops the upstream commands and grid timer and closes the audio process.
 `src/tuner.ts` is the preset picker. The model and the view are values: a keystroke returns the
 next model, and the view returns the rows that the host draws. Every effect stays in one graph,
 and that graph feeds the same blip pipeline, so the picker hears what a session hears.
-The `audition` script uses the same pipeline from the command line.
+`src/arrival.ts` sizes and schedules the deltas it feeds that pipeline, so the sample arrives in
+bursts with uneven gaps the way a provider sends one. The `audition` script uses the same
+pipeline from the command line.
 
 ## Modal synthesis
 
@@ -518,6 +520,12 @@ next to that voice. Start it with `/blips text`, `/blips thinking` or `/blips to
 The speed row gives the rate in characters per second, which is the unit of the `blips/s` on the
 grid row above it. The range runs from 1 to 250 characters per second, which covers what a
 provider delivers. The picker starts at 100.
+
+The sample does not arrive one character at a time. A provider sends about a token whenever it
+has one, so the picker sends deltas of one to twelve graphemes and puts an uneven gap between
+them. The speed row gives the average of those deltas, not a metronome. This matters to what you
+hear: the buffer in `src/stream.ts` is what turns a burst back into an even line of blips, and a
+preset that sounds calm on a smooth stream can sound different on a real one.
 
 Nothing is written before Enter. The write keeps every other key of the file, and the session
 takes the preset at once.
