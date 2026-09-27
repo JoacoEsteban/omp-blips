@@ -973,113 +973,144 @@ export const presets: Record<PresetName, Preset> = {
     }
   },
 
-  // Three voices reading the same characters at the same moment, and agreeing
-  // about none of them. Each one takes every grapheme — `codepoint`, stride 1,
-  // divisor 1 on a 250 Hz grid — through a different modulus, so one letter is
-  // three unrelated pitches at once, and the moduli are coprime (17, 13, 11)
-  // so the three readings never fall back into step. The registers are tuned
-  // apart rather than together: 622.25 Hz against 91 Hz against 1479.98 Hz is
-  // a tritone stack, and the low voice sits a few cents under F#2 so it beats
-  // against everything above it.
+  // Two mouths and a needle. The prose and the reasoning are the generic
+  // tracts — a harmonic source read through resonances that stay put in Hz
+  // while the pitch moves — and all three voices read every grapheme at
+  // once: `codepoint`/`class`, stride 1, divisor 1. One character is a
+  // syllable said three times over, in three registers that were tuned apart
+  // instead of together, and the tones are long enough to still be talking
+  // when the next four arrive. What the ear gets is not a rhythm but a crowd.
   //
-  // The tone lengths are not free. The mixer rings 32 voices and drops the
-  // next, so three voices at one tick per grapheme share 128 ms of the 4 ms
-  // grid; 12 + 9 + 7 leaves most of that spare, and no character is ever the
-  // one that goes missing. Every voice is struck `firm` because a
-  // `soft` attack alone is 8 ms. The character is spent on glide instead:
-  // the prose falls a fifth inside each tone and the muttering rises a fourth,
-  // so the two are always sliding past each other.
+  // The grid is 125 ticks a second, so the cursor drains faster than any
+  // provider streams and `catchup` never has to widen the stride. That rate
+  // is a ceiling, not a tempo: what actually sounds is the arrival rate of
+  // the text, so ordinary prose overlaps three or four deep and a token
+  // dumped all at once surges to thirteen. The mixer rings 32 voices, which
+  // is 256 ms of tone across the 8 ms grid; 104 + 88 + 28 fits even when the
+  // drain runs flat out, so no character is ever the one that goes missing.
+  //
+  // Every envelope control is doing work. The prose swells instead of
+  // striking and holds before it fades, so each syllable arrives rather than
+  // starts; the reasoning swells over almost half its length, which is what
+  // makes it impossible to say when it began. The pitch controls disagree on
+  // purpose: the prose rises three semitones inside each tone, the reasoning
+  // sags nine, and the tool voice drops a tenth like something falling over.
   psychosis: {
     description:
-      'Every character, three times at once, in three tunings that disagree.',
+      'Two mouths on every character and a needle over them, none agreeing.',
     patch: {
-      tickHz: 250,
+      tickHz: 125,
       voices: {
+        // The answer, read back to you in a mouth that is not yours. `brass`
+        // is a source and a filter, and this voice freezes the filter: one
+        // held shape for every character, so all the movement is pitch. It
+        // is the steady one, and it is only steady next to what is under it.
         text: {
           spatial: {
             placement: {
               kind: 'characters',
               groups: [
-                { chars: 'aeiouAEIOU', at: -0.85 },
-                { chars: '0123456789', at: 0.85 },
-                { chars: '.,;:!?\'"()[]{}', at: 0.55 }
+                { chars: 'aeiouAEIOU', at: -0.7 },
+                { chars: '0123456789', at: 0.8 },
+                { chars: '.,;:!?\'"()[]{}', at: 0.45 }
               ],
               otherwise: 0
             },
-            // Clocked on the voice, not the tone: a 13 ms tone cannot move, so
-            // what swings is the whole field, and slowly enough to be felt
-            // rather than heard.
+            // Clocked on the tone, so the movement belongs to the syllable
+            // and not to the mix: 120 ms is a sixth of this period, and each
+            // utterance slides off the place it started from.
             motion: {
               kind: 'oscillate',
-              clock: 'voice',
-              depth: 0.15,
-              periodMs: 5300
+              clock: 'tone',
+              depth: 0.55,
+              periodMs: 720
             }
           },
           divisor: 1,
           stride: 1,
-          catchup: 32,
-          toneMs: 12,
-          decay: 2.2,
-          glide: 7,
-          volume: 0.32,
-          material: 'ceramic',
-          touch: 'firm',
-          baseFrequency: 622.25,
-          reading: { kind: 'codepoint', span: 17 },
-          pitch: { kind: 'chromatic', span: 17 }
+          catchup: 64,
+          toneMs: 104,
+          decay: 3.4,
+          swell: 0.22,
+          hold: 0.3,
+          glide: -3,
+          volume: 0.18,
+          material: 'brass',
+          color: { kind: 'fixed', at: 0.35 },
+          touch: 'soft',
+          baseFrequency: 155.56,
+          reading: { kind: 'codepoint', span: 24 },
+          pitch: {
+            kind: 'scalar',
+            scale: HIRAJOSHI,
+            octaves: 2,
+            mapping: 'fold'
+          }
         },
+        // The thought underneath, which will not settle. Two cycles run
+        // through it at once and neither divides the other: the character
+        // picks a note out of 29 through a restless scale that `wrap` sends
+        // climbing and snapping back to the bottom, and the same character
+        // picks one of 4 mouth shapes. 29 and 4 share no factor, so the pair
+        // takes 116 characters to repeat and no utterance is the one before
+        // it. Nothing articulates: the swell eats over half the tone, the
+        // decay barely falls, and each one sags a major sixth on its way
+        // out, so a word arrives as a groan and the groans pile up 11 deep
+        // into a cluster that keeps rearranging itself.
         thinking: {
-          // Dead centre, and the widest swing of the three: the mutter starts
-          // inside the head and keeps leaving it. Its period is coprime with
-          // the prose voice's, so the two never come back to the same place.
           spatial: {
             placement: { kind: 'fixed', at: 0 },
+            // The widest swing of the three, clocked on the mix: it starts in
+            // the middle of the head and keeps leaving it, on a period that
+            // shares no factor with the prose voice's.
             motion: {
               kind: 'oscillate',
               clock: 'voice',
-              depth: 0.9,
-              periodMs: 2900
+              depth: 0.95,
+              periodMs: 4300
             }
           },
           divisor: 1,
           stride: 1,
-          catchup: 32,
-          toneMs: 9,
-          decay: 2.6,
-          glide: -5,
-          volume: 0.22,
+          catchup: 64,
+          toneMs: 88,
+          decay: 0.7,
+          swell: 0.55,
+          hold: 0,
+          glide: 9,
+          volume: 0.24,
           material: 'reed',
-          // The one sustained material here, so the one voice that reads
-          // `color`: five mouth shapes in rotation turn a run of characters
-          // into something with consonants in it.
-          color: { kind: 'vowel', span: 5 },
-          touch: 'firm',
-          baseFrequency: 91,
-          reading: { kind: 'codepoint', span: 13 },
-          pitch: { kind: 'chromatic', span: 13 }
+          color: { kind: 'vowel', span: 4 },
+          touch: 'soft',
+          baseFrequency: 98,
+          reading: { kind: 'codepoint', span: 29 },
+          pitch: { kind: 'scalar', scale: BLUES, octaves: 2, mapping: 'wrap' }
         },
+        // The interruption, and the one thing here that is not a mouth: a
+        // struck needle over the two tracts, falling a tenth inside 32 ms.
+        // Six positions rather than two, because an even ping-pong would
+        // become a rhythm and this voice is not allowed to become one.
         tool: {
-          // Six positions, not two: an even ping-pong is a rhythm, and this
-          // voice is not allowed to become one.
           spatial: {
             placement: {
               kind: 'alternate',
-              positions: [-1, 0.5, 1, -0.5, 1, -1]
+              positions: [-1, 0.6, 1, -0.55, 0.9, -0.85]
             }
           },
           divisor: 1,
           stride: 1,
-          catchup: 32,
-          toneMs: 7,
-          decay: 3,
-          glide: 12,
-          volume: 0.38,
+          catchup: 64,
+          toneMs: 28,
+          decay: 2.6,
+          swell: 0,
+          hold: 0.12,
+          glide: 16,
+          volume: 0.07,
           material: 'glass',
           touch: 'firm',
           baseFrequency: 1479.98,
-          reading: { kind: 'codepoint', span: 11 },
-          pitch: { kind: 'chromatic', span: 11 }
+          reading: { kind: 'codepoint', span: 19 },
+          pitch: { kind: 'chromatic', span: 19 }
         }
       }
     }

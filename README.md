@@ -190,7 +190,7 @@ profile: `src/preset-sans.ts`. The default preset has the name `default`.
 | `telegraph`  | A wire. Each character is one tick, and only the spaces speak.                      | `class`     |
 | `geiger`     | One tick for each character, at any speed the text arrives.                         | `class`     |
 | `hexdump`    | Raw bytes. Punctuation sounds, and the tool calls lead.                             | `codepoint` |
-| `psychosis`  | Every character, three times at once, in three tunings that disagree.               | `codepoint` |
+| `psychosis`  | Two mouths on every character and a needle over them, none agreeing.                | `codepoint` |
 | `sans`       | A rising vocal blip. Rounded low tones, one for each character.                     | `vocal`     |
 
 The eight presets after `quiet` each show one reading or one pitch with nothing in its way:
@@ -213,13 +213,25 @@ The eight presets after `quiet` each show one reading or one pitch with nothing 
   struck `firm` for the same reason, because a `soft` attack alone takes 8 milliseconds.
 - `hexdump` reads the tool arguments character by character. It is the one preset in which the
   tool voice leads.
-- `psychosis` runs the `geiger` grid with all three voices on the same characters at the same
-  moment. Each voice folds the character through a different modulus — 17, 13 and 11 — so one
-  letter is three unrelated pitches, and the three moduli are coprime, so the readings never fall
-  back into step. The registers are a tritone apart and the low voice sits a few cents under F#2,
-  so it beats against everything above it. Each tone bends inside its own length: the prose falls
-  a fifth, the reasoning rises a fourth, the tool voice falls an octave. The whole field swings
-  from side to side on two periods that never realign.
+- `psychosis` puts both generic tracts to work at once. A tract is a harmonic source read
+  through resonances that stay at fixed frequencies while the pitch moves, so a character can
+  choose its note and its mouth shape separately. The two prose voices take opposite sides of
+  that. The answer voice freezes the shape and moves only in pitch, through a dissonant mode
+  that `fold` keeps turning back on itself. The reasoning voice moves in both and lets neither
+  cycle divide the other: the character picks a note out of 29 through a restless scale that
+  `wrap` sends climbing and snapping back to the bottom, and the same character picks one of
+  four mouth shapes, so the pair takes 116 characters to come back to where it started.
+  Nothing in that voice articulates — the swell eats over half of each tone, the decay barely
+  falls, and every tone sags a major sixth on the way out — so the groans pile up eleven deep
+  into a cluster that keeps rearranging itself. Over the two of them the tool voice is a struck
+  needle that falls a tenth inside 28 milliseconds.
+  All three read every character. The grid runs at 125 ticks a second, so the cursor drains
+  faster than a provider streams and the stride never widens; that rate is a ceiling, not a
+  tempo, so what sounds is the speed of the text. Prose overlaps three or four tones deep, and a
+  token that arrives all at once surges to thirteen. The tones last 104, 88 and 28 milliseconds,
+  which is 28 of the 32 voices the mixer rings, so no character is lost even at full speed. The
+  answer voice moves inside each tone, the reasoning swings across the whole mix on a period
+  that shares no factor with it, and the tool voice jumps between six uneven positions.
 
 `sans` uses the dedicated `vocal` material for a low character voice. Each text blip lasts 140 milliseconds
 at 164.81 Hz. It rises across its first 15%, holds until its midpoint, then fades.
