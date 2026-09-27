@@ -58,6 +58,10 @@ its input.
 start of a session, the deltas of the assistant, the end of a message, the shutdown, and each
 `/blips` call.
 
+`src/index.ts` is a shell. It registers that command once, and holds nothing else: the graph lives
+in `src/runtime.ts`, and the shell can read it again from disk while the session runs. See
+[Reloading the source](#reloading-the-source).
+
 The state of a session is a fold over those streams. `src/session.ts` holds the reducer. It takes a
 session and an event, and it returns the next session. It changes nothing in place.
 `src/commands.ts` holds the one step that touches the disk: `reload`, `preset`, `where` and every
@@ -670,6 +674,32 @@ is what the session gives you.
 
 The sample generators are loaded on demand. A session that never opens the picker never imports
 `lorem-ipsum` or `esfuzz`.
+
+### Reloading the source
+
+In a checkout, saving a file under `src/` is enough: the extension watches its own source and
+reads it again, so an edit to a preset, a material or the mixer is audible on the next blip.
+The old graph stops, its `ffplay` device closes with it, and a new graph starts on the same host
+streams. Nothing about the session changes.
+
+The watcher runs only where `.jj` or `.git` sits beside `src/`, which is the difference between
+source you are editing and an installed copy. Saves arrive in bursts, so they settle for 150 ms
+before one reload; a save that leaves every mtime where it was is ignored, because rebuilding for
+it would cut a tone for nothing.
+
+omp imports an extension once for the life of the process, and neither `/reload-plugins` nor
+`ctx.reload()` reads its source again. What does work is the tag omp puts on the entry it imports:
+its loader matches any module of the extension followed by `?mtime=<digits>`, and rewrites the
+source it hands back so bare dependencies resolve against the extension and relative imports
+inherit that same tag. So importing `runtime.ts` under a new tag re-evaluates the whole graph
+below it. `src/hot.ts` computes the tag, and the digits are not optional: a fractional tag misses
+that filter, the rewrite is skipped, and the graph fails on its first `import ... from 'rxjs'`.
+
+`src/index.ts` imports `runtime.ts` statically as well. That import is what puts the graph in
+front of omp's loader, which only rewrites modules it can reach from the entry.
+
+The new graph is loaded before the running one is torn down, so source that does not compile
+reports its error and leaves the session playing what it already had.
 
 ## Platform
 
