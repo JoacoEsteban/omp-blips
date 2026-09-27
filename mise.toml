@@ -17,9 +17,9 @@ run = "bun run lint:fix"
 description = "Play the same phrase through every preset"
 run = "bun run scripts/audition.ts"
 
-[tasks.lab]
-description = "Compare presets and materials against generated prose and code streams"
-run = "bun run scripts/lab.ts"
+[tasks.test]
+description = "Run the unit tests"
+run = "bun test"
 
 [tasks.link]
 description = "Symlink this repo into the omp user extensions directory"

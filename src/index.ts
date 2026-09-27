@@ -1,12 +1,16 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
 import {
   catchError,
+  combineLatest,
   EMPTY,
   filter,
+  from,
   ignoreElements,
   map,
   merge,
+  mergeMap,
   type Observable,
+  of,
   scan,
   share,
   shareReplay,
@@ -14,16 +18,18 @@ import {
   takeUntil,
   tap
 } from 'rxjs'
-import { match } from 'ts-pattern'
+import { match, P } from 'ts-pattern'
 import {
   completions,
   type Intent,
   interpret,
   parse,
+  type Settled,
   usage
 } from './commands.ts'
 import { extensionStreams, type NoticeLevel, type Notify } from './events.ts'
-import { flush, play, playback } from './player.ts'
+import { type Device, flush, play, playback } from './player.ts'
+import type { PresetName } from './presets.ts'
 import {
   deviceOf,
   initialSession,
@@ -39,14 +45,22 @@ import {
   isInterrupt,
   stoppedEarly
 } from './stream.ts'
+import { createTuner, type Surface, type Tuner } from './tuner.ts'
 
 /** Something the user asked of the session, plus how to answer it. */
-interface Request {
+interface Ask {
   readonly intent: Intent
   readonly notify: Notify
   readonly level: NoticeLevel
   /** A session start only speaks when the config file was rejected. */
   readonly quiet: boolean
+  /** Where a dialog can be drawn, when the ask came from a terminal. */
+  readonly surface: Surface | undefined
+}
+
+/** An ask the session can fold, once the tuner has had its say. */
+interface Request extends Omit<Ask, 'intent'> {
+  readonly intent: Settled
 }
 
 /** What the UI is told about one request. */
@@ -77,6 +91,35 @@ const stepOf = (step: Step, request: Request): Step => {
   return { session, answer: answerFor(request, session) }
 }
 
+/**
+ * The preset the tuner came back with is the command the user would otherwise
+ * have typed, so it joins the same fold as every other request.
+ */
+const kept = (preset: PresetName | undefined): Settled =>
+  match(preset)
+    .with(P.nullish, (): Settled => ({ type: 'say', text: 'preset unchanged' }))
+    .otherwise((name): Settled => ({ type: 'preset', name }))
+
+/** The one intent that has to reach the user before the session can fold it. */
+const settled = (ask: Ask, tuner: Tuner): Observable<Settled> =>
+  match(ask.intent)
+    .with({ type: 'tune' }, () =>
+      match(ask.surface)
+        .with(P.nullish, () =>
+          of<Settled>({
+            type: 'say',
+            text: 'picking a preset by ear needs an interactive terminal'
+          })
+        )
+        .otherwise((surface) => from(tuner.open(surface)).pipe(map(kept)))
+    )
+    .otherwise((intent) => of(intent))
+
+/** The tuner holds the device open while it auditions a preset. */
+const deviceFor = ([device, tuning]: readonly [Device, boolean]): Device => ({
+  muted: device.muted && !tuning
+})
+
 export default function blips(pi: ExtensionAPI): void {
   const io = extensionStreams(pi, {
     name: 'blips',
@@ -84,22 +127,32 @@ export default function blips(pi: ExtensionAPI): void {
     completions
   })
 
-  const requests: Observable<Request> = merge(
+  const tuner = createTuner()
+
+  const asks: Observable<Ask> = merge(
     io.started.pipe(
       map(({ notify }) => ({
         intent: { type: 'reload' } as const,
         notify,
         level: 'warning' as const,
-        quiet: true
+        quiet: true,
+        surface: undefined
       }))
     ),
     io.invoked.pipe(
-      map(({ args, notify }) => ({
+      map(({ args, notify, surface }) => ({
         intent: parse(args),
         notify,
         level: 'info' as const,
-        quiet: false
+        quiet: false,
+        surface
       }))
+    )
+  )
+
+  const requests: Observable<Request> = asks.pipe(
+    mergeMap((ask) =>
+      settled(ask, tuner).pipe(map((intent) => ({ ...ask, intent })))
     )
   )
 
@@ -150,10 +203,16 @@ export default function blips(pi: ExtensionAPI): void {
       restart,
       ticks
     ).pipe(map(({ tone }) => play(tone))),
-    silenced.pipe(map(() => flush()))
+    silenced.pipe(map(() => flush())),
+    tuner.audition
   ).pipe(takeUntil(io.shutdown))
 
-  const audio = playback(session.pipe(map(deviceOf)), commands).pipe(
+  const devices = combineLatest([
+    session.pipe(map(deviceOf)),
+    tuner.active
+  ]).pipe(map(deviceFor))
+
+  const audio = playback(devices, commands).pipe(
     // A dead device must not take the session down with it.
     catchError(() => EMPTY)
   )

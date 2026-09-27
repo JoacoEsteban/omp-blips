@@ -82,8 +82,10 @@ come out. The state is a value, so the same events always give the same audio.
 A subscription starts the audio, and the end of the subscription stops it. The `session_shutdown`
 event stops the upstream commands and grid timer and closes the audio process.
 
-The scripts use the same pipeline. The sound lab keeps a pure model-and-commands loop for the
-display, and it puts every effect in the graph.
+`src/tuner.ts` is the preset picker. The model and the view are values: a keystroke returns the
+next model, and the view returns the rows that the host draws. Every effect stays in one graph,
+and that graph feeds the same blip pipeline, so the picker hears what a session hears.
+The `audition` script uses the same pipeline from the command line.
 
 ## Modal synthesis
 
@@ -478,6 +480,7 @@ To remove the symbolic link, run `mise run unlink`.
 | `/blips thinking`      | Starts or stops the voice for the reasoning.                    |
 | `/blips tool`          | Starts or stops the voice for the tool arguments.               |
 | `/blips presets`       | Shows the list of presets.                                      |
+| `/blips preset`        | Opens the preset picker, and writes the preset that you keep.   |
 | `/blips preset <name>` | Writes this preset to the configuration file and uses it.       |
 | `/blips reload`        | Reads the configuration file again. A restart is not necessary. |
 | `/blips where`         | Shows the path of the configuration file.                       |
@@ -485,6 +488,45 @@ To remove the symbolic link, run `mise run unlink`.
 The command completes its arguments. Type `/blips ` and the dropdown shows each subcommand with
 its description. Type `/blips preset ` and it shows each preset name with its description. An
 unknown word shows the usage line instead of a silent change.
+
+## The preset picker
+
+`/blips preset` with no name opens a picker in the terminal. The list holds every preset, and the
+preset under the cursor sounds at once: the extension reads a generated sample through it at the
+speed of an answer. A `·` marks the preset that the configuration file names today.
+
+The picker auditions one voice at a time, and each voice reads its own kind of text. The text
+voice reads prose. The thinking voice reads short lowercase sentences, because reasoning has
+shorter sentences than answer text, and a structural reading finds its sentence reset more often
+there. The tool voice reads JavaScript from `esfuzz`, which is parser-fuzzing input and not
+representative application code. The sample is raw code, not a tool-call payload, and the picker
+never runs it.
+
+A voice that is off in the configuration file is silent in the picker too. The picker says `off`
+next to that voice. Start it with `/blips text`, `/blips thinking` or `/blips tool`.
+
+| Key          | Action                                             |
+| ------------ | -------------------------------------------------- |
+| ↑ / ↓        | Move the cursor to another preset.                 |
+| ← / → or Tab | Audition another voice.                            |
+| `r`          | Generate a new sample for this voice.              |
+| `[` / `]`    | Make the stream slower or faster.                  |
+| Space        | Pause or continue the stream.                      |
+| Enter        | Keep this preset: write it to the file and use it. |
+| Esc or `q`   | Leave the configuration file as it is.             |
+
+The speed row gives the rate in characters per second, which is the unit of the `blips/s` on the
+grid row above it. The range runs from 1 to 250 characters per second, which covers what a
+provider delivers. The picker starts at 100.
+
+Nothing is written before Enter. The write keeps every other key of the file, and the session
+takes the preset at once.
+
+The picker needs the interactive terminal. In the print and RPC modes the command says so and
+changes nothing.
+
+If the generator gives eight empty samples in a row, the picker shows the reason and stops the
+stream. Press `r` to try again.
 
 ## Configuration
 
@@ -559,44 +601,20 @@ before stay in use. The extension never stops the session because of a configura
 
 ## Development
 
-| Command              | Function                                                              |
-| -------------------- | --------------------------------------------------------------------- |
-| `mise run typecheck` | Examines the types with `tsc`.                                        |
-| `mise run lint`      | Examines the source files with ESLint.                                |
-| `mise run lint-fix`  | Corrects ESLint errors that have automatic corrections.               |
-| `mise run audition`  | Plays the same text through every preset.                             |
-| `mise run lab`       | Compares presets and materials with generated prose and code streams. |
+| Command              | Function                                                |
+| -------------------- | ------------------------------------------------------- |
+| `mise run typecheck` | Examines the types with `tsc`.                          |
+| `mise run lint`      | Examines the source files with ESLint.                  |
+| `mise run lint-fix`  | Corrects ESLint errors that have automatic corrections. |
+| `mise run test`      | Runs the unit tests with `bun test`.                    |
+| `mise run audition`  | Plays the same text through every preset.               |
 
-The sound lab has three modes, one for each voice. Prose uses `lorem-ipsum` and the text voice.
-Reason uses short lowercase sentences and the thinking voice. Call uses `esfuzz` JavaScript and
-the tool voice. The call sample is raw code, not a JSON tool-call payload. The lab never runs the
-generated code.
+The preset picker reads the same configuration file as the extension, and it sounds through the
+same pipeline. A change of one preset is therefore easy to hear, and what you hear in the picker
+is what the session gives you.
 
-Reasoning has shorter sentences than answer text. A reading that follows the structure of the text
-finds its sentence reset more frequently in this mode.
-
-Each mode generates a fresh sample when the current sample ends. Preset and material changes keep
-the current sample. The selected material applies to all three voices. Switching modes restarts
-the selected sample and preserves the speed and pause state.
-
-| Key          | Action                                       |
-| ------------ | -------------------------------------------- |
-| Tab          | Switch between prose, reason and call.       |
-| `r`          | Generate a new sample for the selected mode. |
-| Left / Right | Select a preset.                             |
-| Up / Down    | Select a material.                           |
-| `[` / `]`    | Decrease / increase the stream speed.        |
-| Space        | Pause or resume the stream.                  |
-| `q`          | Exit the lab.                                |
-
-If code generation returns eight empty samples, the lab shows an error and stops the call stream.
-Press `r` to retry. The previous sample remains stored but does not repeat automatically.
-
-The call stream uses `esfuzz.render(esfuzz.generate({ maxDepth: 8 }))`.
-`esfuzz` generates parser-fuzzing input, not representative application code.
-
-The lab compares materials and presets with the same sample, so a change of one value is easy to
-hear. The lab reads the same configuration file as the extension.
+The sample generators are loaded on demand. A session that never opens the picker never imports
+`lorem-ipsum` or `esfuzz`.
 
 ## Platform
 

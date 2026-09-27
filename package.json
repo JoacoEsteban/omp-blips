@@ -15,10 +15,8 @@
     "lint:fix": "eslint src scripts --fix"
   },
   "dependencies": {
-    "@flyingrobots/bijou": "^7.2.0",
-    "@flyingrobots/bijou-node": "^7.2.0",
-    "@flyingrobots/bijou-tui": "^7.2.0",
     "esfuzz": "^0.3.1",
+    "lorem-ipsum": "^3.0.0",
     "rxjs": "^7.8.2",
     "ts-pattern": "^5.9.0",
     "zod": "^4.6.5"
@@ -34,7 +32,6 @@
     "eslint-plugin-jest": "^29.16.1",
     "eslint-plugin-prettier": "^5.5.6",
     "globals": "^17.11.0",
-    "lorem-ipsum": "^3.0.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.0"
   }

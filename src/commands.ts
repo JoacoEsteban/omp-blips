@@ -31,8 +31,16 @@ export type Intent =
   | { readonly type: 'presets' }
   | { readonly type: 'reload' }
   | { readonly type: 'where' }
+  /** Pick a preset by ear; the answer is whatever the tuner comes back with. */
+  | { readonly type: 'tune' }
   /** Nothing to change; the answer is the message itself. */
   | { readonly type: 'say'; readonly text: string }
+
+/**
+ * An intent the session can answer on its own. `tune` is the one intent that
+ * has to go through the user first, so it never reaches the fold.
+ */
+export type Settled = Exclude<Intent, { readonly type: 'tune' }>
 
 interface Subcommand {
   readonly name: string
@@ -85,9 +93,12 @@ const SUBCOMMANDS: readonly Subcommand[] = [
   },
   {
     name: 'preset',
-    description: 'Use a preset from now on',
-    argument: { hint: '<name>', complete: presetCompletions },
-    intent: (name) => ({ type: 'preset', name })
+    description: 'Pick a preset by ear, or name one to use from now on',
+    argument: { hint: '[name]', complete: presetCompletions },
+    intent: (name) =>
+      match(name)
+        .with('', (): Intent => ({ type: 'tune' }))
+        .otherwise((chosen): Intent => ({ type: 'preset', name: chosen }))
   },
   {
     name: 'presets',
@@ -195,7 +206,7 @@ const named = (name: string): PresetName | undefined =>
  *
  * A write that fails changes nothing, so its reason is the whole answer.
  */
-export const interpret = (intent: Intent, session: Session): SessionEvent =>
+export const interpret = (intent: Settled, session: Session): SessionEvent =>
   match(intent)
     .with({ type: P.union('toggle', 'all', 'cycle') }, (voice): SessionEvent =>
       match(saveVoices(enablement(session, voice)))

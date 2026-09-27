@@ -4,7 +4,9 @@ import type {
   MessageUpdateEvent
 } from '@oh-my-pi/pi-coding-agent'
 import { type Observable, Subject } from 'rxjs'
+import { match } from 'ts-pattern'
 import type { Completion } from './commands.ts'
+import type { Surface } from './tuner.ts'
 
 export type NoticeLevel = 'info' | 'warning'
 export type Notify = (message: string, level: NoticeLevel) => void
@@ -17,6 +19,8 @@ export interface Caller {
 export interface Invocation extends Caller {
   /** Everything typed after `/blips`. */
   readonly args: string
+  /** The terminal the command was typed into, when it is an interactive one. */
+  readonly surface: Surface | undefined
 }
 
 /** The `/blips` command, described by pure functions the shell registers. */
@@ -76,6 +80,10 @@ export const extensionStreams = (
     handler: async (args, ctx) => {
       invoked.next({
         args,
+        // A custom component only has somewhere to draw in the terminal.
+        surface: match(ctx.mode)
+          .with('tui', () => ctx.ui)
+          .otherwise(() => undefined),
         notify: (message, level) => {
           ctx.ui.notify(message, level)
         }
