@@ -5,7 +5,14 @@ import { join } from 'node:path'
 import { PRESET_NAMES } from './presets.ts'
 import type { Sample, Samples } from './samples.ts'
 import { loadSettings } from './settings.ts'
-import { advanced, presetOf, stepped, tuningOf, type Tuning } from './tuner.ts'
+import {
+  advanced,
+  presetOf,
+  stepped,
+  tuningOf,
+  type Tuning,
+  voicingFor
+} from './tuner.ts'
 
 process.env['PI_CODING_AGENT_DIR'] = mkdtempSync(join(tmpdir(), 'omp-blips-'))
 
@@ -68,4 +75,12 @@ test('a sample that runs out is replaced, and the reading carries on', () => {
   expect(spent.offset).toBe(0)
   expect(spent.streamed).toBe(`${start.sample.text}\n`)
   expect(advanced(spent, samples).char).toBe('t')
+})
+
+test('a voice the preset silences is still auditioned by the picker', () => {
+  const tool = tuningOfStep(tuningOf(samples, 'quiet'), 'left')
+
+  expect(tool.kind).toBe('tool')
+  expect(tool.config.voices.tool.enabled).toBe(false)
+  expect(voicingFor(tool).voice).toEqual(tool.config.voices.tool)
 })

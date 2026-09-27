@@ -100,10 +100,9 @@ const configFor = (preset: PresetName): BlipConfig =>
 const voiceOf = (tuning: Tuning): VoiceConfig =>
   tuning.config.voices[tuning.kind]
 
-const voicingFor = (tuning: Tuning): Voicing => ({
-  voice: match(voiceOf(tuning))
-    .with({ enabled: false }, () => undefined)
-    .otherwise((voice): VoiceConfig | undefined => voice)
+/** The dialog auditions the preset whatever the config says, as the device does. */
+export const voicingFor = (tuning: Tuning): Voicing => ({
+  voice: voiceOf(tuning)
 })
 
 interface Clock {
