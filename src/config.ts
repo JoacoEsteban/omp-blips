@@ -5,8 +5,10 @@ import type { ReadingConfig } from './reading.ts'
 import type { SpatialConfig } from './spatial.ts'
 import type { Material, Touch } from './synth.ts'
 
+export const STREAM_KINDS = ['text', 'thinking', 'tool'] as const
+
 /** Which part of the assistant stream a blip came from. */
-export type StreamKind = 'text' | 'thinking' | 'tool'
+export type StreamKind = (typeof STREAM_KINDS)[number]
 
 /** Voicing for one stream kind, so the three are audibly distinguishable. */
 export interface VoiceConfig {

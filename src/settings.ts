@@ -1,12 +1,14 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { match, P } from 'ts-pattern'
 import { z } from 'zod'
 import {
   type BlipConfig,
   type ConfigPatch,
   defaultConfig,
+  type StreamKind,
+  STREAM_KINDS,
   type VoiceConfig,
   type VoicePatch
 } from './config.ts'
@@ -118,22 +120,20 @@ const settingsSchema = z
 
 export type BlipSettings = z.infer<typeof settingsSchema>
 
-/** Where a config file may live. Later entries win. */
-export const settingsPaths = (cwd: string): readonly string[] => [
+/** The one config file. `$PI_CODING_AGENT_DIR` selects another profile. */
+export const settingsPath = (): string =>
   join(
     process.env['PI_CODING_AGENT_DIR'] ?? join(homedir(), '.omp', 'agent'),
     'blips.json'
-  ),
-  join(cwd, '.omp', 'blips.json')
-]
+  )
 
 export interface LoadedSettings {
   readonly config: BlipConfig
   /** The preset the config was built on. */
   readonly preset: PresetName
-  /** Files that were read, in precedence order. */
-  readonly sources: readonly string[]
-  /** Human-readable reasons a file was ignored; never thrown. */
+  /** The file the config was read from, when there was a readable one. */
+  readonly source: string | undefined
+  /** Human-readable reasons the file was ignored; never thrown. */
   readonly problems: readonly string[]
 }
 
@@ -192,48 +192,125 @@ export const applyPatch = (
   }
 })
 
-/**
- * Defaults, then a preset, then `blips.json` from the agent directory, then the
- * project. A malformed or unknown-keyed file is reported and skipped rather than
- * silently half-applied, so a typo never leaves you guessing at the sound.
- *
- * `preset` overrides the name the files ask for; that is how `/blips preset` works.
- */
-export const loadSettings = (
-  cwd: string,
-  preset?: PresetName
-): LoadedSettings => {
-  const read = settingsPaths(cwd)
-    .filter((path) => existsSync(path))
-    .map((path) => ({ path, result: readSettings(path) }))
+/** The file as it is on disk; `undefined` when there is no file at all. */
+const currentSettings = (path: string): BlipSettings | string | undefined =>
+  match(existsSync(path))
+    .with(false, () => undefined)
+    .with(true, () => readSettings(path))
+    .exhaustive()
 
-  const { sources, problems, patches } = read.reduce<{
-    readonly sources: readonly string[]
-    readonly problems: readonly string[]
-    readonly patches: readonly BlipSettings[]
-  }>(
-    (collected, { path, result }) =>
-      match(result)
-        .with(P.string, (problem) => ({
-          ...collected,
-          problems: [...collected.problems, problem]
-        }))
-        .otherwise((patch) => ({
-          ...collected,
-          sources: [...collected.sources, path],
-          patches: [...collected.patches, patch]
-        })),
-    { sources: [], problems: [], patches: [] }
-  )
-
-  const name =
-    preset ??
-    patches.reduce<PresetName>((acc, patch) => patch.preset ?? acc, 'default')
-
-  const config = patches.reduce<BlipConfig>(
-    applyPatch,
-    applyPatch(defaultConfig, presets[name].patch)
-  )
-
-  return { config, preset: name, sources, problems }
+/** What one read of the file amounts to, before a preset is laid under it. */
+interface Read {
+  readonly source: string | undefined
+  readonly problems: readonly string[]
+  readonly patch: BlipSettings
 }
+
+/**
+ * Defaults, then the preset, then the config file. A malformed or
+ * unknown-keyed file is reported and skipped rather than silently
+ * half-applied, so a typo never leaves you guessing at the sound.
+ *
+ * `preset` overrides the name the file asks for; the scripts audition a preset
+ * that way without writing anything.
+ */
+export const loadSettings = (preset?: PresetName): LoadedSettings => {
+  const path = settingsPath()
+
+  const { source, problems, patch } = match(currentSettings(path))
+    .with(P.nullish, (): Read => ({
+      source: undefined,
+      problems: [],
+      patch: {}
+    }))
+    .with(P.string, (problem): Read => ({
+      source: undefined,
+      problems: [problem],
+      patch: {}
+    }))
+    .otherwise((settings): Read => ({
+      source: path,
+      problems: [],
+      patch: settings
+    }))
+
+  const name = preset ?? patch.preset ?? 'default'
+
+  return {
+    config: applyPatch(applyPatch(defaultConfig, presets[name].patch), patch),
+    preset: name,
+    source,
+    problems
+  }
+}
+
+const writeSettings = (
+  path: string,
+  settings: BlipSettings
+): string | undefined =>
+  match(
+    ((): Error | undefined => {
+      try {
+        mkdirSync(dirname(path), { recursive: true })
+        writeFileSync(path, `${JSON.stringify(settings, undefined, 2)}\n`)
+        return undefined
+      } catch (error) {
+        return match(error)
+          .with(P.instanceOf(Error), (cause) => cause)
+          .otherwise((cause) => new Error(String(cause)))
+      }
+    })()
+  )
+    .with(P.instanceOf(Error), (error) => `${path}: ${error.message}`)
+    .otherwise(() => undefined)
+
+/**
+ * A command edits the file instead of holding a session-only override, so the
+ * next session starts where this one left off. A file that does not parse is
+ * left untouched: rewriting it would throw away what was typed by hand.
+ * Returns the reason when nothing was written.
+ */
+const save = (
+  change: (current: BlipSettings) => BlipSettings
+): string | undefined => {
+  const path = settingsPath()
+
+  return match(currentSettings(path))
+    .with(P.string, (problem) => `not saved, ${problem}`)
+    .otherwise((settings) => writeSettings(path, change(settings ?? {})))
+}
+
+type VoiceSettings = NonNullable<BlipSettings['voices']>
+
+/** Named keys rather than a computed one, so the strict shape is kept. */
+const withEnabled = (
+  voices: VoiceSettings,
+  kind: StreamKind,
+  enabled: boolean
+): VoiceSettings =>
+  match(kind)
+    .with('text', () => ({ ...voices, text: { ...voices.text, enabled } }))
+    .with('thinking', () => ({
+      ...voices,
+      thinking: { ...voices.thinking, enabled }
+    }))
+    .with('tool', () => ({ ...voices, tool: { ...voices.tool, enabled } }))
+    .exhaustive()
+
+/** Writes only the voices the user asked about; the rest of the file stays. */
+export const saveVoices = (
+  enabled: Readonly<Partial<Record<StreamKind, boolean>>>
+): string | undefined =>
+  save((current) => ({
+    ...current,
+    voices: STREAM_KINDS.reduce<VoiceSettings>(
+      (voices, kind) =>
+        match(enabled[kind])
+          .with(P.nullish, () => voices)
+          .otherwise((value) => withEnabled(voices, kind, value)),
+      current.voices ?? {}
+    )
+  }))
+
+export const savePreset = (preset: PresetName): string | undefined =>
+  save((current) => ({ ...current, preset }))

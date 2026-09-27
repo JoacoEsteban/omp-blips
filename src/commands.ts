@@ -1,8 +1,17 @@
 import { match, P } from 'ts-pattern'
-import type { StreamKind } from './config.ts'
 import { type PresetName, PRESET_NAMES, presets } from './presets.ts'
-import type { Session, SessionEvent } from './session.ts'
-import { loadSettings, settingsPaths } from './settings.ts'
+import {
+  enablement,
+  type Session,
+  type SessionEvent,
+  type VoiceIntent
+} from './session.ts'
+import {
+  loadSettings,
+  savePreset,
+  settingsPath,
+  saveVoices
+} from './settings.ts'
 
 /**
  * Structural stand-in for pi-tui's `AutocompleteItem`: the TUI package is only a
@@ -15,11 +24,9 @@ export interface Completion {
   readonly hint?: string
 }
 
-/** What the user asked for, before anything is read from disk. */
+/** What the user asked for, before anything is read from or written to disk. */
 export type Intent =
-  | { readonly type: 'toggle'; readonly kind: StreamKind }
-  | { readonly type: 'all'; readonly enabled: boolean }
-  | { readonly type: 'cycle' }
+  | VoiceIntent
   | { readonly type: 'preset'; readonly name: string }
   | { readonly type: 'presets' }
   | { readonly type: 'reload' }
@@ -78,7 +85,7 @@ const SUBCOMMANDS: readonly Subcommand[] = [
   },
   {
     name: 'preset',
-    description: 'Use a preset for the rest of the session',
+    description: 'Use a preset from now on',
     argument: { hint: '<name>', complete: presetCompletions },
     intent: (name) => ({ type: 'preset', name })
   },
@@ -89,12 +96,12 @@ const SUBCOMMANDS: readonly Subcommand[] = [
   },
   {
     name: 'reload',
-    description: 'Re-read the config files',
+    description: 'Re-read the config file',
     intent: () => ({ type: 'reload' })
   },
   {
     name: 'where',
-    description: 'Show the config files that are read',
+    description: 'Show the config file that is read',
     intent: () => ({ type: 'where' })
   }
 ]
@@ -182,19 +189,28 @@ const named = (name: string): PresetName | undefined =>
   PRESET_NAMES.find((candidate) => candidate === name)
 
 /**
- * The one impure step of the session fold: `reload`, `preset`, and `where` read
- * the config files. Everything downstream of here is a pure value.
+ * The one impure step of the session fold: a command reads the config file,
+ * and a command that changes something writes it first. Everything downstream
+ * of here is a pure value.
+ *
+ * A write that fails changes nothing, so its reason is the whole answer.
  */
-export const interpret = (
-  intent: Intent,
-  cwd: string,
-  session: Session
-): SessionEvent =>
+export const interpret = (intent: Intent, session: Session): SessionEvent =>
   match(intent)
+    .with({ type: P.union('toggle', 'all', 'cycle') }, (voice): SessionEvent =>
+      match(saveVoices(enablement(session, voice)))
+        .with(P.string, (problem): SessionEvent => ({
+          type: 'say',
+          text: problem
+        }))
+        .otherwise((): SessionEvent => ({
+          type: 'switched',
+          settings: loadSettings()
+        }))
+    )
     .with({ type: 'reload' }, (): SessionEvent => ({
       type: 'loaded',
-      settings: loadSettings(cwd, session.chosen),
-      chosen: session.chosen
+      settings: loadSettings()
     }))
     .with({ type: 'preset' }, ({ name }): SessionEvent =>
       match(named(name))
@@ -202,11 +218,17 @@ export const interpret = (
           type: 'say',
           text: `unknown preset "${name}"\n${presetList()}`
         }))
-        .otherwise((chosen): SessionEvent => ({
-          type: 'loaded',
-          settings: loadSettings(cwd, chosen),
-          chosen
-        }))
+        .otherwise((chosen): SessionEvent =>
+          match(savePreset(chosen))
+            .with(P.string, (problem): SessionEvent => ({
+              type: 'say',
+              text: problem
+            }))
+            .otherwise((): SessionEvent => ({
+              type: 'loaded',
+              settings: loadSettings()
+            }))
+        )
     )
     .with({ type: 'presets' }, (): SessionEvent => ({
       type: 'say',
@@ -214,6 +236,7 @@ export const interpret = (
     }))
     .with({ type: 'where' }, (): SessionEvent => ({
       type: 'say',
-      text: settingsPaths(cwd).join(', ')
+      text: settingsPath()
     }))
-    .otherwise((direct) => direct)
+    .with({ type: 'say' }, (said): SessionEvent => said)
+    .exhaustive()

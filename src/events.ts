@@ -9,9 +9,8 @@ import type { Completion } from './commands.ts'
 export type NoticeLevel = 'info' | 'warning'
 export type Notify = (message: string, level: NoticeLevel) => void
 
-/** Where a request came from and how to answer it. */
+/** How a request is answered. */
 export interface Caller {
-  readonly cwd: string
   readonly notify: Notify
 }
 
@@ -51,7 +50,6 @@ export const extensionStreams = (
 
   pi.on('session_start', (_event, ctx) => {
     started.next({
-      cwd: ctx.cwd,
       notify: (message, level) => {
         ctx.ui.notify(message, level)
       }
@@ -78,7 +76,6 @@ export const extensionStreams = (
     handler: async (args, ctx) => {
       invoked.next({
         args,
-        cwd: ctx.cwd,
         notify: (message, level) => {
           ctx.ui.notify(message, level)
         }

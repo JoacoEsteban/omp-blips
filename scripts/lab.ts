@@ -145,7 +145,7 @@ interface GeneratedCall {
 }
 
 const configFor = (preset: PresetName): BlipConfig =>
-  loadSettings(process.cwd(), preset).config
+  loadSettings(preset).config
 
 const generateProseSample = (): string =>
   loremIpsum({ count: 3, units: 'paragraphs' })

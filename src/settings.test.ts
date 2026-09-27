@@ -1,23 +1,27 @@
 import { expect, test } from 'bun:test'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { loadSettings } from './settings.ts'
+import { match, P } from 'ts-pattern'
+import { loadSettings, saveVoices, settingsPath } from './settings.ts'
 import type { SpatialConfig } from './spatial.ts'
 
-const withConfig = <T>(raw: object, read: (cwd: string) => T): T => {
-  const serialized = JSON.stringify(raw)
-  if (serialized === undefined) throw new Error('fixture must serialize')
-  const cwd = mkdtempSync(join(tmpdir(), 'omp-blips-'))
+/** Runs `read` against a profile directory whose config file holds `raw`. */
+const withConfig = <T>(raw: string | object, read: () => T): T => {
+  const contents = match(raw)
+    .with(P.string, (text) => text)
+    .otherwise((value) => JSON.stringify(value))
+  if (contents === undefined) throw new Error('fixture must serialize')
+  const dir = mkdtempSync(join(tmpdir(), 'omp-blips-'))
   const previous = process.env['PI_CODING_AGENT_DIR']
-  process.env['PI_CODING_AGENT_DIR'] = cwd
+  process.env['PI_CODING_AGENT_DIR'] = dir
   try {
-    writeFileSync(join(cwd, 'blips.json'), serialized)
-    return read(cwd)
+    writeFileSync(join(dir, 'blips.json'), contents)
+    return read()
   } finally {
     if (previous === undefined) delete process.env['PI_CODING_AGENT_DIR']
     else process.env['PI_CODING_AGENT_DIR'] = previous
-    rmSync(cwd, { recursive: true, force: true })
+    rmSync(dir, { recursive: true, force: true })
   }
 }
 
@@ -41,10 +45,10 @@ const INVALID_SPATIAL = [
 
 for (const { name, spatial } of INVALID_SPATIAL)
   test(`invalid spatial ${name} is rejected without partial application`, () => {
-    const baseline = withConfig({}, (cwd) => loadSettings(cwd).config)
+    const baseline = withConfig({}, () => loadSettings().config)
     const settings = withConfig(
       { voices: { text: { spatial, volume: 0.1 } } },
-      (cwd) => loadSettings(cwd)
+      () => loadSettings()
     )
     expect(settings.problems.length).toBeGreaterThan(0)
     expect(settings.config).toEqual(baseline)
@@ -64,9 +68,37 @@ test('valid nested spatial configuration is loaded', () => {
       periodMs: 800
     }
   }
-  const settings = withConfig({ voices: { text: { spatial } } }, (cwd) =>
-    loadSettings(cwd)
+  const settings = withConfig({ voices: { text: { spatial } } }, () =>
+    loadSettings()
   )
   expect(settings.problems).toEqual([])
   expect(settings.config.voices.text.spatial).toEqual(spatial)
+})
+
+test('saved voices join the rest of the file and come back on a reload', () => {
+  const settings = withConfig(
+    { preset: 'gamelan', voices: { text: { volume: 0.25 } } },
+    () => {
+      expect(
+        saveVoices({ text: false, thinking: true, tool: false })
+      ).toBeUndefined()
+      return loadSettings()
+    }
+  )
+  expect(settings.problems).toEqual([])
+  expect(settings.preset).toBe('gamelan')
+  expect(settings.config.voices.text.volume).toBe(0.25)
+  expect(settings.config.voices.text.enabled).toBe(false)
+  expect(settings.config.voices.thinking.enabled).toBe(true)
+  expect(settings.config.voices.tool.enabled).toBe(false)
+})
+
+test('a config file that does not parse is reported and left alone', () => {
+  const kept = withConfig('{ "preset": ', () => {
+    expect(saveVoices({ text: false, thinking: false, tool: false })).toContain(
+      'not saved'
+    )
+    return readFileSync(settingsPath(), 'utf8')
+  })
+  expect(kept).toBe('{ "preset": ')
 })

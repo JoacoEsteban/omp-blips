@@ -58,8 +58,9 @@ start of a session, the deltas of the assistant, the end of a message, the shutd
 
 The state of a session is a fold over those streams. `src/session.ts` holds the reducer. It takes a
 session and an event, and it returns the next session. It changes nothing in place.
-`src/commands.ts` holds the one step that reads from disk: `reload`, `preset`, and `where` read the
-configuration files. What they read becomes the event that the reducer gets.
+`src/commands.ts` holds the one step that touches the disk: `reload`, `preset`, `where` and every
+voice command read the configuration file, and a command that changes something writes it first.
+What they read becomes the event that the reducer gets.
 
 `src/stream.ts` makes blips from the deltas. It groups the chunks by stream kind, so each voice
 keeps its own cursor into its own text. A delta only appends to that text. The shared grid is one
@@ -226,8 +227,9 @@ To select a preset, write its name in a configuration file:
 A configuration file can also change single values of the preset. The extension applies the preset
 first, then the file.
 
-To try a preset in a session, run `/blips preset gamelan`. This selection stays until the session
-ends. To see the list of names, run `/blips presets`.
+To select a preset in a session, run `/blips preset gamelan`. The command writes the name into the
+configuration file, so the choice holds for the next session too. To see the list of names, run
+`/blips presets`.
 
 ## Voices
 
@@ -467,18 +469,18 @@ To remove the symbolic link, run `mise run unlink`.
 
 ## Commands
 
-| Command                | Result                                                                                                            |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `/blips`               | Stops all voices. If all voices are off, it starts all voices.                                                    |
-| `/blips on`            | Starts all voices.                                                                                                |
-| `/blips off`           | Stops all voices.                                                                                                 |
-| `/blips text`          | Starts or stops the voice for the answer text.                                                                    |
-| `/blips thinking`      | Starts or stops the voice for the reasoning.                                                                      |
-| `/blips tool`          | Starts or stops the voice for the tool arguments.                                                                 |
-| `/blips presets`       | Shows the list of presets.                                                                                        |
-| `/blips preset <name>` | Uses this preset until the session ends.                                                                          |
-| `/blips reload`        | Reads the configuration files again. A restart is not necessary. It keeps the voices that you started or stopped. |
-| `/blips where`         | Shows the paths of the configuration files.                                                                       |
+| Command                | Result                                                          |
+| ---------------------- | --------------------------------------------------------------- |
+| `/blips`               | Stops all voices. If all voices are off, it starts all voices.  |
+| `/blips on`            | Starts all voices.                                              |
+| `/blips off`           | Stops all voices.                                               |
+| `/blips text`          | Starts or stops the voice for the answer text.                  |
+| `/blips thinking`      | Starts or stops the voice for the reasoning.                    |
+| `/blips tool`          | Starts or stops the voice for the tool arguments.               |
+| `/blips presets`       | Shows the list of presets.                                      |
+| `/blips preset <name>` | Writes this preset to the configuration file and uses it.       |
+| `/blips reload`        | Reads the configuration file again. A restart is not necessary. |
+| `/blips where`         | Shows the path of the configuration file.                       |
 
 The command completes its arguments. Type `/blips ` and the dropdown shows each subcommand with
 its description. Type `/blips preset ` and it shows each preset name with its description. An
@@ -486,14 +488,17 @@ unknown word shows the usage line instead of a silent change.
 
 ## Configuration
 
-A change to the sound does not need a change to the code in `src/`. Write a file with the name
-`blips.json` in one of these two locations:
+A change to the sound does not need a change to the code in `src/`. The extension reads one file:
+`~/.omp/agent/blips.json`, or `$PI_CODING_AGENT_DIR/blips.json` for a different profile. There is
+no per-project file: the sound of the agent belongs to the machine, not to the repository.
 
-1. `~/.omp/agent/blips.json`, or `$PI_CODING_AGENT_DIR/blips.json` for a different profile.
-2. `<project>/.omp/blips.json`.
+The file is optional. The extension starts with the default values, then applies the preset, then
+the file. The file gives only the keys that it changes.
 
-The two files are optional. The extension starts with the default values. Then it applies the
-preset, then the first file, then the second file. A file gives only the keys that it changes.
+The commands write this same file. `/blips off`, `/blips text` and the others store the state of
+the three voices in `voices.*.enabled`, and `/blips preset` stores `preset`. A file that does not
+parse is never rewritten, so a hand-written file is never lost to a command; the command reports
+the reason and changes nothing.
 
 ```json
 {
@@ -523,7 +528,7 @@ Each voice under `voices.text`, `voices.thinking` and `voices.tool` accepts thes
 
 | Key             | Type                                                                           | Function                                                        |
 | --------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| `enabled`       | boolean                                                                        | Starts this voice at the start of a session.                    |
+| `enabled`       | boolean                                                                        | Whether this voice sounds. The voice commands write this key.   |
 | `divisor`       | positive integer                                                               | Ticks of the grid spent on one blip of this voice.              |
 | `stride`        | positive integer                                                               | Characters the reading walks for one blip.                      |
 | `toneMs`        | number                                                                         | The length of one tone in milliseconds.                         |
@@ -591,7 +596,7 @@ The call stream uses `esfuzz.render(esfuzz.generate({ maxDepth: 8 }))`.
 `esfuzz` generates parser-fuzzing input, not representative application code.
 
 The lab compares materials and presets with the same sample, so a change of one value is easy to
-hear. The lab reads the same configuration files as the extension.
+hear. The lab reads the same configuration file as the extension.
 
 ## Platform
 

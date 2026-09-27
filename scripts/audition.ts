@@ -29,7 +29,7 @@ await lastValueFrom(
   from(PRESET_NAMES).pipe(
     concatMap((name) =>
       defer(() => {
-        const { config } = loadSettings(process.cwd(), name)
+        const { config } = loadSettings(name)
         const voice = config.voices[kind]
 
         console.log(

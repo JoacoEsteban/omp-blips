@@ -43,10 +43,9 @@ import {
 /** Something the user asked of the session, plus how to answer it. */
 interface Request {
   readonly intent: Intent
-  readonly cwd: string
   readonly notify: Notify
   readonly level: NoticeLevel
-  /** A session start only speaks when a config file was rejected. */
+  /** A session start only speaks when the config file was rejected. */
   readonly quiet: boolean
 }
 
@@ -74,10 +73,7 @@ const answerFor = (request: Request, session: Session): Answer | undefined =>
     .exhaustive()
 
 const stepOf = (step: Step, request: Request): Step => {
-  const session = reduce(
-    step.session,
-    interpret(request.intent, request.cwd, step.session)
-  )
+  const session = reduce(step.session, interpret(request.intent, step.session))
   return { session, answer: answerFor(request, session) }
 }
 
@@ -90,18 +86,16 @@ export default function blips(pi: ExtensionAPI): void {
 
   const requests: Observable<Request> = merge(
     io.started.pipe(
-      map(({ cwd, notify }) => ({
+      map(({ notify }) => ({
         intent: { type: 'reload' } as const,
-        cwd,
         notify,
         level: 'warning' as const,
         quiet: true
       }))
     ),
     io.invoked.pipe(
-      map(({ args, cwd, notify }) => ({
+      map(({ args, notify }) => ({
         intent: parse(args),
-        cwd,
         notify,
         level: 'info' as const,
         quiet: false
