@@ -15,6 +15,8 @@ import {
   shareReplay,
   startWith,
   type Subscription,
+  switchMap,
+  take,
   takeUntil,
   tap
 } from 'rxjs'
@@ -22,6 +24,7 @@ import { match, P } from 'ts-pattern'
 import { type Intent, interpret, parse, type Settled } from './commands.ts'
 import type { ExtensionStreams, NoticeLevel, Notify } from './events.ts'
 import { type Device, flush, play, playback } from './player.ts'
+import { FfplayLocator, type Located } from './players/locate.ts'
 import type { PresetName } from './presets.ts'
 import {
   deviceOf,
@@ -106,6 +109,17 @@ const settled = (ask: Ask, tuner: Tuner): Observable<Settled> =>
 const deviceFor = ([device, tuning]: readonly [Device, boolean]): Device => ({
   muted: device.muted && !tuning
 })
+
+const announce = (notify: Notify, located: Located): void =>
+  match(located)
+    .with({ type: 'fetching' }, ({ url }) => {
+      notify(`Blips: ffplay not found, downloading ${url}`, 'info')
+    })
+    .with({ type: 'ready', fetched: true }, ({ path }) => {
+      notify(`Blips: ffplay installed at ${path}`, 'info')
+    })
+    .with({ type: 'ready', fetched: false }, () => undefined)
+    .exhaustive()
 
 export const start: Start = (io) => {
   const tuner = createTuner()
@@ -192,10 +206,28 @@ export const start: Start = (io) => {
     tuner.active
   ]).pipe(map(deviceFor))
 
-  const audio = playback(devices, commands).pipe(
+  const ffplay = new FfplayLocator()
+
+  const installs = io.started.pipe(
+    take(1),
+    switchMap(({ notify }) =>
+      ffplay.located.pipe(
+        tap((event) => announce(notify, event)),
+        catchError((error: unknown) => {
+          notify(`Blips: no audio, ${String(error)}`, 'warning')
+          return EMPTY
+        })
+      )
+    ),
+    ignoreElements()
+  )
+
+  const audio = playback(devices, commands, ffplay.path).pipe(
     // A dead device must not take the session down with it.
     catchError(() => EMPTY)
   )
 
-  return merge(notices, audio).pipe(takeUntil(io.shutdown)).subscribe()
+  return merge(notices, installs, audio)
+    .pipe(takeUntil(io.shutdown))
+    .subscribe()
 }

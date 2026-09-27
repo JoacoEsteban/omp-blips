@@ -23,10 +23,12 @@ const sameDevice = (left: Device, right: Device): boolean =>
 /**
  * The commands are made hot here: a backend may subscribe to them more than
  * once, and a device change must not replay the tones of the previous one.
+ * The binary is only asked for once a device is wanted.
  */
 export const playback = (
   devices: Observable<Device>,
-  commands: Observable<PlayCommand>
+  commands: Observable<PlayCommand>,
+  binary: Observable<string>
 ): Observable<never> => {
   const live = commands.pipe(
     share({
@@ -41,7 +43,9 @@ export const playback = (
     switchMap((device) =>
       match(device.muted)
         .with(true, () => EMPTY)
-        .with(false, () => ffplay()(live))
+        .with(false, () =>
+          binary.pipe(switchMap((path) => ffplay({ path })(live)))
+        )
         .exhaustive()
     )
   )

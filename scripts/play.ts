@@ -13,6 +13,7 @@ import {
 } from 'rxjs'
 import type { BlipConfig, StreamKind } from '../src/config.ts'
 import { play, playback } from '../src/player.ts'
+import { FfplayLocator } from '../src/players/locate.ts'
 import { type Blip, gridFrom, gridPeriodMs, tonesFrom } from '../src/stream.ts'
 
 /** How long the device stays open after the last character, in tone lengths. */
@@ -53,5 +54,5 @@ export const playText = (
       timer(voice.toneMs * TAIL).pipe(ignoreElements())
     )
 
-    return playback(of({ muted: false }), commands)
+    return playback(of({ muted: false }), commands, new FfplayLocator().path)
   })

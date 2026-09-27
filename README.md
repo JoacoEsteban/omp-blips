@@ -481,8 +481,21 @@ melody moves in small steps and sounds more like a song.
 
 ## Playback
 
-The extension uses `ffplay`. The code is in `src/players/ffplay.ts`. Install `ffmpeg` before you
-install the extension.
+The extension uses `ffplay`. The code is in `src/players/ffplay.ts`.
+
+The extension finds `ffplay` in this order. The code is in `src/players/locate.ts`.
+
+1. An `ffplay` on the `PATH`. An `ffmpeg` install from a package manager gives this binary.
+2. A binary that the extension downloaded before.
+3. A new download. The extension downloads the static `ffplay` 9.0.2 build for the platform from
+   [ffmpeg.martin-riedl.de](https://ffmpeg.martin-riedl.de/). It compares the file with a pinned
+   SHA256 checksum, and then writes the binary to `~/Library/Caches/omp-blips` on macOS or to
+   `$XDG_CACHE_HOME/omp-blips` (default `~/.cache/omp-blips`) on Linux.
+
+The download is approximately 29 MB and occurs one time. A notice shows when it starts and when it
+ends. If the download fails, a warning shows and the session has no audio. Start `omp` again to try
+again. Builds are available for macOS arm64 and x64 and for Linux x64 and arm64. On other
+platforms, install `ffmpeg`.
 
 The extension starts one `ffplay` process and keeps it. The process reads interleaved 16-bit stereo PCM at 44.1 kHz.
 A mixer writes new audio each 10 ms and stays 40 ms in front of the clock.
@@ -515,9 +528,9 @@ Up to 40 ms of audio is already in the pipe, so silence starts a moment after th
 
 ## Install
 
-1. Install `ffmpeg`.
-2. Run `mise run link`. This command makes a symbolic link in `~/.omp/agent/extensions/omp-blips`.
-3. Start `omp` again. The extension loads at the start of a session.
+1. Run `mise run link`. This command makes a symbolic link in `~/.omp/agent/extensions/omp-blips`.
+2. Start `omp` again. The extension loads at the start of a session. If `ffplay` is not on the
+   `PATH`, the extension downloads it. Refer to [Playback](#playback).
 
 To remove the symbolic link, run `mise run unlink`.
 
@@ -703,4 +716,4 @@ reports its error and leaves the session playing what it already had.
 
 ## Platform
 
-The extension uses `ffplay` and the default audio output of the system.
+The extension uses `ffplay` and the default audio output of the system. It runs on macOS and Linux.

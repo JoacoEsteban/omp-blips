@@ -62,6 +62,7 @@ const FFPLAY_ARGS = [
 ]
 
 export interface FfplayOptions {
+  readonly path: string
   /** Silence before the device closes. `Infinity` keeps it for the whole subscription. */
   readonly idleMs?: number
 }
@@ -73,8 +74,8 @@ interface Device {
   readonly close: () => void
 }
 
-const openDevice = (): Device => {
-  const child = spawn('ffplay', FFPLAY_ARGS, {
+const openDevice = (path: string): Device => {
+  const child = spawn(path, FFPLAY_ARGS, {
     stdio: ['pipe', 'ignore', 'ignore']
   })
   // A device that dies mid-write is a closed device, not a crash.
@@ -140,11 +141,12 @@ const blocks = (
   })
 
 const session = (
+  path: string,
   idleMs: number,
   commands: Observable<PlayCommand>
 ): Observable<never> =>
   defer(() => {
-    const device = openDevice()
+    const device = openDevice(path)
     let latest: MixerState | undefined
 
     return blocks(idleMs, commands).pipe(
@@ -172,9 +174,9 @@ const session = (
  * another.
  */
 export const ffplay =
-  ({ idleMs = IDLE_MS }: FfplayOptions = {}): Backend =>
+  ({ path, idleMs = IDLE_MS }: FfplayOptions): Backend =>
   (commands) =>
     commands.pipe(
       filter((command) => command.type === 'play'),
-      exhaustMap((first) => session(idleMs, concat(of(first), commands)))
+      exhaustMap((first) => session(path, idleMs, concat(of(first), commands)))
     )
