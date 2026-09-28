@@ -528,11 +528,15 @@ Up to 40 ms of audio is already in the pipe, so silence starts a moment after th
 
 ## Install
 
-1. Run `mise run link`. This command makes a symbolic link in `~/.omp/agent/extensions/omp-blips`.
-2. Start `omp` again. The extension loads at the start of a session. If `ffplay` is not on the
-   `PATH`, the extension downloads it. Refer to [Playback](#playback).
+```sh
+omp plugin install omp-blips
+```
 
-To remove the symbolic link, run `mise run unlink`.
+Start `omp` again. The extension loads at the start of a session. If `ffplay` is not on the `PATH`,
+the extension downloads it. Refer to [Playback](#playback).
+
+To work on the source, run `mise run link`. This command makes a symbolic link in
+`~/.omp/agent/extensions/omp-blips`. To remove it, run `mise run unlink`.
 
 ## Commands
 

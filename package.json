@@ -1,7 +1,11 @@
 {
   "name": "omp-blips",
   "version": "0.1.0",
-  "private": true,
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "blips.example.json"
+  ],
   "type": "module",
   "description": "omp extension that plays a pitched blip while the assistant streams text",
   "omp": {
