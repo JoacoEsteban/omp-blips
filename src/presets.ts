@@ -8,33 +8,12 @@ import {
   MINOR_PENTATONIC
 } from './scales.ts'
 
-export const PRESET_NAMES = [
-  'default',
-  'arcade',
-  'gamelan',
-  'sonar',
-  'typewriter',
-  'music-box',
-  'quiet',
-  'haiku',
-  'pulse',
-  'plainchant',
-  'cipher',
-  'telegraph',
-  'geiger',
-  'hexdump',
-  'psychosis',
-  'sans'
-] as const
-
-export type PresetName = (typeof PRESET_NAMES)[number]
-
 export interface Preset {
   readonly description: string
   readonly patch: ConfigPatch
 }
 
-export const presets: Record<PresetName, Preset> = {
+export const presets = {
   default: {
     description: 'Prose melody, dark reasoning murmur, bright tool ticks.',
     patch: {
@@ -1057,4 +1036,10 @@ export const presets: Record<PresetName, Preset> = {
   },
 
   sans: sansPreset
-}
+} satisfies Record<string, Preset>
+
+export type PresetName = keyof typeof presets
+
+export const PRESET_NAMES: readonly PresetName[] = Object.keys(presets).filter(
+  (name): name is PresetName => Object.hasOwn(presets, name)
+)
