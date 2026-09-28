@@ -19,9 +19,10 @@ import {
   takeWhile,
   tap
 } from 'rxjs'
-import { match } from 'ts-pattern'
+import { match, P } from 'ts-pattern'
 import { SAMPLE_RATE } from '../synth.ts'
 import {
+  FRAME_BYTES,
   mixerStep,
   openMixer,
   releaseMixer,
@@ -37,10 +38,18 @@ const IDLE_MS = 20_000
 const MASTER_FADE_MS = 6
 const WRITEAHEAD_MS = 40
 
+/**
+ * ffmpeg's raw PCM reader hands over 100 ms packets and waits for each to
+ * fill, which the mixer's lead cannot beat. The WAV reader takes a packet
+ * size, so the stream is a WAV of one tick per packet. It is float because
+ * that reader probes 16-bit PCM for S/PDIF first, which blocks on a pipe until
+ * 64 KiB arrive. `info` is the lowest level that prints the status line the
+ * clock is read from.
+ */
 const FFPLAY_ARGS = [
   '-hide_banner',
   '-loglevel',
-  'quiet',
+  'info',
   '-nodisp',
   '-autoexit',
   '-fflags',
@@ -52,14 +61,43 @@ const FFPLAY_ARGS = [
   '-analyzeduration',
   '0',
   '-f',
-  's16le',
-  '-ar',
-  String(SAMPLE_RATE),
-  '-ch_layout',
-  'stereo',
+  'wav',
+  '-max_size',
+  String(Math.round((TICK_MS * SAMPLE_RATE) / 1000) * FRAME_BYTES),
   '-i',
   'pipe:0'
 ]
+
+/** The sizes are the streaming "unknown length" maximum. */
+const wavHeader = (): Buffer => {
+  const header = Buffer.alloc(44)
+  header.write('RIFF', 0)
+  header.writeUInt32LE(0xffffffff, 4)
+  header.write('WAVE', 8)
+  header.write('fmt ', 12)
+  header.writeUInt32LE(16, 16)
+  // 3 is IEEE float.
+  header.writeUInt16LE(3, 20)
+  header.writeUInt16LE(2, 22)
+  header.writeUInt32LE(SAMPLE_RATE, 24)
+  header.writeUInt32LE(SAMPLE_RATE * FRAME_BYTES, 28)
+  header.writeUInt16LE(FRAME_BYTES, 32)
+  header.writeUInt16LE(32, 34)
+  header.write('data', 36)
+  header.writeUInt32LE(0xffffffff, 40)
+  return header
+}
+
+/** ffplay's status line leads with its playback clock in seconds, or `nan` before it plays. */
+const heardMsOf = (status: string): number | undefined =>
+  match(/(-?\d+\.\d+) M-A/.exec(status))
+    .with([P._, P.string.select()], (seconds) => Number(seconds) * 1000)
+    .otherwise(() => undefined)
+
+interface Heard {
+  readonly at: number
+  readonly heardMs: number
+}
 
 export interface FfplayOptions {
   readonly path: string
@@ -71,15 +109,20 @@ interface Device {
   readonly write: (block: Buffer) => void
   /** Emits once when the process leaves on its own. */
   readonly closed: Observable<unknown>
+  /** Emits once, when the device first reports what it is playing. */
+  readonly heard: Observable<Heard>
   readonly close: () => void
 }
 
 const openDevice = (path: string): Device => {
   const child = spawn(path, FFPLAY_ARGS, {
-    stdio: ['pipe', 'ignore', 'ignore']
+    stdio: ['pipe', 'ignore', 'pipe']
   })
   // A device that dies mid-write is a closed device, not a crash.
-  child.stdin?.on('error', () => {})
+  child.stdin.on('error', () => {})
+  child.stdin.write(wavHeader())
+  // ffplay blocks once an unread stderr fills, so what the sync does not read is dropped.
+  child.stderr.resume()
 
   let closeTimer: NodeJS.Timeout | undefined
   let closed = false
@@ -98,15 +141,24 @@ const openDevice = (path: string): Device => {
   const ended = merge(fromEvent(child, 'exit'), fromEvent(child, 'error')).pipe(
     take(1)
   )
+  const heard = fromEvent(child.stderr, 'data').pipe(
+    map((chunk) => ({
+      at: performance.now(),
+      heardMs: heardMsOf(String(chunk))
+    })),
+    filter((reading): reading is Heard => reading.heardMs !== undefined),
+    take(1)
+  )
 
   return {
     write: (block) => {
-      child.stdin?.write(block)
+      child.stdin.write(block)
     },
     closed: ended,
+    heard,
     close: () => {
       if (closed) return
-      child.stdin?.end()
+      child.stdin.end()
       closeTimer = setTimeout(terminated, WRITEAHEAD_MS + MASTER_FADE_MS + 10)
     }
   }
@@ -122,15 +174,25 @@ const asMixerEvent = (command: PlayCommand): MixerEvent =>
     .with({ type: 'flush' }, (): MixerEvent => ({ type: 'flush' }))
     .exhaustive()
 
+/**
+ * Everything written while ffplay opens its audio device queues ahead of the
+ * first sample it plays, and that backlog would delay every tone after it.
+ * The first sync moves the mixer onto the device's own timeline, so it writes
+ * nothing until the device has played the backlog down to the lead.
+ */
 const blocks = (
   idleMs: number,
-  commands: Observable<PlayCommand>
+  commands: Observable<PlayCommand>,
+  heard: Observable<Heard>
 ): Observable<MixerState> =>
   defer(() => {
     const opened: MixerState = openMixer(performance.now())
 
     return merge(
       commands.pipe(map(asMixerEvent), endWith<MixerEvent>({ type: 'end' })),
+      heard.pipe(
+        map(({ at, heardMs }): MixerEvent => ({ type: 'sync', at, heardMs }))
+      ),
       interval(TICK_MS).pipe(
         map((): MixerEvent => ({ type: 'tick', at: performance.now() }))
       )
@@ -149,7 +211,7 @@ const session = (
     const device = openDevice(path)
     let latest: MixerState | undefined
 
-    return blocks(idleMs, commands).pipe(
+    return blocks(idleMs, commands, device.heard).pipe(
       tap((state) => {
         latest = state
         if (state.block !== undefined) device.write(state.block)
@@ -164,7 +226,7 @@ const session = (
   })
 
 /**
- * One long-lived `ffplay` reading raw PCM from stdin. The mixer writes a
+ * One long-lived `ffplay` reading a WAV stream from stdin. The mixer writes a
  * continuous real-time stream, so tones start on the next 10 ms tick instead of
  * waiting for a process spawn, and overlapping tones are summed into one buffer
  * rather than racing separate processes.

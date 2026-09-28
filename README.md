@@ -497,8 +497,24 @@ ends. If the download fails, a warning shows and the session has no audio. Start
 again. Builds are available for macOS arm64 and x64 and for Linux x64 and arm64. On other
 platforms, install `ffmpeg`.
 
-The extension starts one `ffplay` process and keeps it. The process reads interleaved 16-bit stereo PCM at 44.1 kHz.
-A mixer writes new audio each 10 ms and stays 40 ms in front of the clock.
+The extension starts one `ffplay` process and keeps it. The process reads a WAV stream of
+interleaved 32-bit float stereo at 44.1 kHz, in packets of 10 ms. A mixer writes new audio each
+10 ms and stays 40 ms in front of what the device plays.
+
+`ffplay` needs time to open the audio device: approximately 0.4 s for the built-in speakers and
+1 s for AirPods. Audio written in that time waits in its queue, and without a correction it delays
+every later tone by the same amount. The mixer reads the playback clock from the status line of
+`ffplay`. At the first reading, it stops writing until the device has played the queue down to the
+40 ms lead. The blips of the first moment are late, and the blips after them are not.
+
+`ffplay` does not read raw PCM in small parts. It takes 100 ms packets and waits until each is
+full, so the stream is a WAV with a set packet size. The WAV is float because `ffplay` checks
+16-bit WAV for S/PDIF data first, and on a pipe that check waits for 64 KiB.
+
+Measured from the scheduled moment of a blip to the sound at the built-in microphone, with
+`mise run latency`, a blip reaches AirPods Pro in approximately 225 ms. Before the correction, it
+took 509 ms, and 319 ms through the built-in speakers. Most of the remaining time on AirPods is
+Bluetooth.
 
 This design has two results. A tone starts without waiting for a new process. Two tones that occur
 together become one mixed sound.

@@ -1,5 +1,5 @@
 import { match } from 'ts-pattern'
-import { SAMPLE_RATE, toInt16, voice } from '../synth.ts'
+import { SAMPLE_RATE, voice } from '../synth.ts'
 import type { SpatialMotion } from '../spatial.ts'
 import type { Tone } from './types.ts'
 
@@ -19,6 +19,8 @@ const FADE_MS = 6
 const MAX_VOICES = 32
 
 const LEAD_FRAMES = Math.round((LEAD_MS * SAMPLE_RATE) / 1000)
+/** Stereo 32-bit float, the layout the device's WAV header declares. */
+export const FRAME_BYTES = 8
 /** Largest block written in one tick; anything beyond this was starved, not buffered. */
 const MAX_BLOCK_FRAMES =
   LEAD_FRAMES + Math.round((TICK_MS * SAMPLE_RATE) / 1000)
@@ -91,10 +93,10 @@ interface Ringing {
 }
 
 export interface MixerState {
+  /** Wall clock at which the device plays frame 0; a sync moves it. */
   readonly openedAt: number
   readonly ringing: readonly Ringing[]
   readonly cursor: number
-  readonly tickedAt: number
   readonly lastToneAt: number
   /** No further tones can arrive: the command stream is finished. */
   readonly ended: boolean
@@ -108,12 +110,13 @@ export type MixerEvent =
   | { readonly type: 'flush' }
   | { readonly type: 'tick'; readonly at: number }
   | { readonly type: 'end' }
+  /** At wall clock `at` the device was playing the frame `heardMs` into the stream. */
+  | { readonly type: 'sync'; readonly at: number; readonly heardMs: number }
 
 export const openMixer = (at: number): MixerState => ({
   openedAt: at,
   ringing: [],
   cursor: 0,
-  tickedAt: at,
   lastToneAt: at,
   ended: false,
   block: undefined,
@@ -164,7 +167,7 @@ const mixBlock = (
   cursor: number,
   openedAt: number
 ): Mixed => {
-  const block = Buffer.alloc(frames * 4)
+  const block = Buffer.alloc(frames * FRAME_BYTES)
   const frame: StereoFrame = { left: 0, right: 0 }
 
   for (let i = 0; i < frames && ringing.length > 0; i += 1) {
@@ -192,25 +195,30 @@ const mixBlock = (
       left += frame.left * sound.gain * releaseGain
       right += frame.right * sound.gain * releaseGain
     }
-    block.writeInt16LE(toInt16(left), i * 4)
-    block.writeInt16LE(toInt16(right), i * 4 + 2)
+    block.writeFloatLE(Math.max(-1, Math.min(1, left)), i * FRAME_BYTES)
+    block.writeFloatLE(Math.max(-1, Math.min(1, right)), i * FRAME_BYTES + 4)
   }
   return { block, ringing: advance(ringing, frames) }
 }
 
 /**
  * A tone starts at the sample its event asked for, not at the head of the next
- * block. The block about to be written begins at the wall clock of the last
- * tick, so the distance from there to `at` is the silence the tone waits
- * through first. Without it every tone inside a tick would collapse onto the
- * same instant, which caps an even grid at one tone per block.
+ * block: `at` sits on the device's timeline, and the distance from the written
+ * cursor to it is the silence the tone waits through first. Without it every
+ * tone inside a tick would collapse onto the same instant, which caps an even
+ * grid at one tone per block. Before the first block there is no lead yet, so
+ * a tone due at the open sounds at the head of the stream. A tone already
+ * behind the cursor, as while a sync drains the device, sounds at the next
+ * sample written.
  */
 const struck = (state: MixerState, tone: Tone, at: number): MixerState => {
   if (state.ringing.length >= MAX_VOICES) return { ...state, block: undefined }
   const gains = panGains(tone.spatial.at)
-  const waited = Math.max(
+  const offset = Math.min(
     0,
-    Math.round(((at - state.tickedAt) * SAMPLE_RATE) / 1000)
+    Math.max(state.cursor, LEAD_FRAMES) -
+      LEAD_FRAMES -
+      Math.round(((at - state.openedAt) * SAMPLE_RATE) / 1000)
   )
   return {
     ...state,
@@ -220,7 +228,7 @@ const struck = (state: MixerState, tone: Tone, at: number): MixerState => {
       {
         source: { kind: 'mono', samples: voice(tone) },
         gain: tone.volume,
-        offset: -waited,
+        offset,
         spatial: tone.spatial,
         release: 0,
         leftGain: gains[0],
@@ -264,8 +272,6 @@ const ticked = (idleMs: number, state: MixerState, at: number): MixerState => {
   return {
     ...state,
     cursor: state.cursor + frames,
-    // The block that follows begins where this one ended, which is now.
-    tickedAt: at,
     ringing: mixed.ringing,
     block: mixed.block,
     done: false
@@ -292,5 +298,10 @@ export const mixerStep =
         ended: true,
         block: undefined,
         done: state.ringing.length === 0
+      }))
+      .with({ type: 'sync' }, ({ at, heardMs }) => ({
+        ...state,
+        openedAt: at - heardMs,
+        block: undefined
       }))
       .exhaustive()

@@ -4,7 +4,6 @@ import { sansProfile } from './vocal-profile.ts'
 
 export const SAMPLE_RATE = 44_100
 
-const PEAK = 0x7fff
 const NYQUIST = SAMPLE_RATE / 2
 const SOUND_VERSION = 'formant-v6'
 /** Nominal level of the modal sum, before the ceiling is enforced. */
@@ -334,6 +333,3 @@ export const voice = (sound: Sound): Float32Array => {
   voices.set(key, samples)
   return samples
 }
-
-export const toInt16 = (sample: number): number =>
-  Math.round(Math.max(-1, Math.min(1, sample)) * PEAK)

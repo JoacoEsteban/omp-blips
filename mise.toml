@@ -17,6 +17,10 @@ run = "bun run lint:fix"
 description = "Play the same phrase through every preset"
 run = "bun run scripts/audition.ts"
 
+[tasks.latency]
+description = "Measure blip latency to the default output through the built-in mic"
+run = "bun run scripts/latency.ts"
+
 [tasks.test]
 description = "Run the unit tests"
 run = "bun test"
