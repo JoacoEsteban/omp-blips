@@ -222,12 +222,20 @@ export const start: Start = (io) => {
     ignoreElements()
   )
 
-  const audio = playback(devices, commands, ffplay.path).pipe(
+  /**
+   * omp calls the factory with no session to validate an install, and waits
+   * for the process to drain. The grid clock and the ffplay lookup behind
+   * audio would hold it open forever, so nothing starts before a session does.
+   */
+  const audio = io.started.pipe(
+    take(1),
+    switchMap(() => playback(devices, commands, ffplay.path)),
     // A dead device must not take the session down with it.
     catchError(() => EMPTY)
   )
 
-  return merge(notices, installs, audio)
+  // Held from the start: audio subscribes after the settings load at session start, and must not miss them.
+  return merge(session.pipe(ignoreElements()), notices, installs, audio)
     .pipe(takeUntil(io.shutdown))
     .subscribe()
 }

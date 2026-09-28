@@ -3,7 +3,7 @@ import type {
   MessageEndEvent,
   MessageUpdateEvent
 } from '@oh-my-pi/pi-coding-agent'
-import { type Observable, Subject } from 'rxjs'
+import { type Observable, ReplaySubject, Subject } from 'rxjs'
 import { match } from 'ts-pattern'
 import type { Completion } from './commands.ts'
 import type { Surface } from './tuner.ts'
@@ -38,7 +38,7 @@ export const extensionStreams = (
   pi: ExtensionAPI,
   command: CommandSpec
 ): ExtensionStreams => {
-  const started = new Subject<Caller>()
+  const started = new ReplaySubject<Caller>(1)
   const invoked = new Subject<Invocation>()
   const assistant = new Subject<MessageUpdateEvent['assistantMessageEvent']>()
   const ended = new Subject<MessageEndEvent['message']>()
