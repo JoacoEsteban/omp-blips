@@ -499,22 +499,27 @@ platforms, install `ffmpeg`.
 
 The extension starts one `ffplay` process and keeps it. The process reads a WAV stream of
 interleaved 32-bit float stereo at 44.1 kHz, in packets of 10 ms. A mixer writes new audio each
-10 ms and stays 40 ms in front of what the device plays.
+10 ms and stays 120 ms in front of what the device plays.
 
 `ffplay` needs time to open the audio device: approximately 0.4 s for the built-in speakers and
 1 s for AirPods. Audio written in that time waits in its queue, and without a correction it delays
 every later tone by the same amount. The mixer reads the playback clock from the status line of
 `ffplay`. At the first reading, it stops writing until the device has played the queue down to the
-40 ms lead. The blips of the first moment are late, and the blips after them are not.
+120 ms lead. The blips of the first moment are late, and the blips after them are not.
 
 `ffplay` does not read raw PCM in small parts. It takes 100 ms packets and waits until each is
 full, so the stream is a WAV with a set packet size. The WAV is float because `ffplay` checks
 16-bit WAV for S/PDIF data first, and on a pipe that check waits for 64 KiB.
 
+The lead has a lower limit. `ffplay` gives SDL audio in 46 ms callbacks, and the clock it reports
+does not include two callbacks that are already with the device. With a 40 ms lead, each callback
+waited for audio and the sound crackled. From 80 ms, the device kept time as well as with a full
+second in the queue. In real sessions, the event loop stopped for up to 130 ms, so the lead is
+120 ms.
+
 Measured from the scheduled moment of a blip to the sound at the built-in microphone, with
-`mise run latency`, a blip reaches AirPods Pro in approximately 225 ms. Before the correction, it
-took 509 ms, and 319 ms through the built-in speakers. Most of the remaining time on AirPods is
-Bluetooth.
+`mise run latency`, a blip reaches AirPods Pro in approximately 313 ms. Before these changes, it
+took 509 ms.
 
 This design has two results. A tone starts without waiting for a new process. Two tones that occur
 together become one mixed sound.
@@ -531,7 +536,7 @@ is linear in that number: 32 voices cost under a tenth of a 10 millisecond block
 fifth of one when every voice carries motion. The presets that ship stay far below it. With all
 three voices reading at once, `haiku` reaches 12 rings and every other preset stays under 6.
 
-A pipe does not discard data. If the event loop stops for more than 40 ms, all later blips move
+A pipe does not discard data. If the event loop stops for more than 120 ms, all later blips move
 back in time and stay late. To prevent this delay, the mixer discards the audio of the interval that
 it missed. The tones become older as if the audio had played. As a result, the sound stays
 synchronous with the text, but there is a short gap.
@@ -540,7 +545,7 @@ After 20 s without a blip, the extension stops the process. The next blip starts
 
 A flush releases active tones over 6 ms. New tones can start during that release without cutting the old release short.
 When the command stream ends, active tones finish naturally. Mute and shutdown append a short release before the process closes.
-Up to 40 ms of audio is already in the pipe, so silence starts a moment after the stop.
+Up to 120 ms of audio is already in the pipe, so silence starts a moment after the stop.
 
 ## Install
 

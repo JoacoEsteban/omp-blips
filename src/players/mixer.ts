@@ -4,8 +4,14 @@ import type { SpatialMotion } from '../spatial.ts'
 import type { Tone } from './types.ts'
 
 export const TICK_MS = 10
-/** Audio written ahead of the wall clock. Lower is tighter, but underruns crackle. */
-const LEAD_MS = 40
+/**
+ * Audio written ahead of what the device plays. ffplay feeds SDL 46 ms
+ * callbacks and its clock already excludes two of them in flight, so 40 ms
+ * starved every callback and crackled; from 80 ms the device kept time as well
+ * as with a full second queued. Real sessions stalled the event loop for up to
+ * 130 ms, which this covers.
+ */
+export const LEAD_MS = 120
 /** Ramp to silence over this long on a flush; cutting a ringing voice dead clicks. */
 const FADE_MS = 6
 /**

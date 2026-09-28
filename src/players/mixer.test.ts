@@ -107,7 +107,7 @@ test('flush releases old tones without cutting a newly played tone', () => {
   const flushed = step(first, { type: 'flush' })
   const added = step(flushed, {
     type: 'play',
-    tone: tone({ at: 1 }),
+    tone: { ...tone({ at: 1 }), toneMs: 400 },
     at: 1
   })
   const rendered = step(added, { type: 'tick', at: 10 })
@@ -170,14 +170,14 @@ test('two tones inside one tick keep the distance between them', () => {
 
 test('a sync that finds the device behind writes nothing until it catches up', () => {
   const step = mixerStep(Infinity)
-  // 300 ms and the 40 ms lead are written before the device plays frame 0.
+  // 300 ms and the 120 ms lead are written before the device plays frame 0.
   const written = step(openMixer(0), { type: 'tick', at: 300 })
   const synced = step(written, { type: 'sync', at: 300, heardMs: 0 })
   const struck = step(synced, { type: 'play', tone: tone({ at: 0 }), at: 400 })
 
   expect(step(struck, { type: 'tick', at: 310 }).block).toBeUndefined()
   expect(struck.ringing.map(({ offset }) => offset)).toEqual([0])
-  // Heard frame plus lead passes the 340 ms already written at 600 ms.
+  // Heard frame plus lead passes the 420 ms already written at 600 ms.
   expect(step(struck, { type: 'tick', at: 590 }).block).toBeUndefined()
   expect(step(struck, { type: 'tick', at: 610 }).block).toBeDefined()
 })

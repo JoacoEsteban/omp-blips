@@ -23,6 +23,7 @@ import { match, P } from 'ts-pattern'
 import { SAMPLE_RATE } from '../synth.ts'
 import {
   FRAME_BYTES,
+  LEAD_MS,
   mixerStep,
   openMixer,
   releaseMixer,
@@ -36,7 +37,6 @@ import type { Backend, PlayCommand } from './types.ts'
 const IDLE_MS = 20_000
 /** Master fade is short enough not to hold mute/shutdown observably. */
 const MASTER_FADE_MS = 6
-const WRITEAHEAD_MS = 40
 
 /**
  * ffmpeg's raw PCM reader hands over 100 ms packets and waits for each to
@@ -159,7 +159,7 @@ const openDevice = (path: string): Device => {
     close: () => {
       if (closed) return
       child.stdin.end()
-      closeTimer = setTimeout(terminated, WRITEAHEAD_MS + MASTER_FADE_MS + 10)
+      closeTimer = setTimeout(terminated, LEAD_MS + MASTER_FADE_MS + 10)
     }
   }
 }
