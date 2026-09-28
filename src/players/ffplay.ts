@@ -31,7 +31,7 @@ import {
   type MixerEvent,
   type MixerState
 } from './mixer.ts'
-import type { Backend, PlayCommand } from './types.ts'
+import type { Backend, Sent } from './types.ts'
 
 /** Tear the device down after this much silence; the next tone opens a new one. */
 const IDLE_MS = 20_000
@@ -164,16 +164,6 @@ const openDevice = (path: string): Device => {
   }
 }
 
-const asMixerEvent = (command: PlayCommand): MixerEvent =>
-  match(command)
-    .with({ type: 'play' }, ({ tone, at }): MixerEvent => ({
-      type: 'play',
-      tone,
-      at
-    }))
-    .with({ type: 'flush' }, (): MixerEvent => ({ type: 'flush' }))
-    .exhaustive()
-
 /**
  * Everything written while ffplay opens its audio device queues ahead of the
  * first sample it plays, and that backlog would delay every tone after it.
@@ -182,14 +172,14 @@ const asMixerEvent = (command: PlayCommand): MixerEvent =>
  */
 const blocks = (
   idleMs: number,
-  commands: Observable<PlayCommand>,
+  commands: Observable<Sent>,
   heard: Observable<Heard>
 ): Observable<MixerState> =>
   defer(() => {
     const opened: MixerState = openMixer(performance.now())
 
     return merge(
-      commands.pipe(map(asMixerEvent), endWith<MixerEvent>({ type: 'end' })),
+      commands.pipe(endWith<MixerEvent>({ type: 'end' })),
       heard.pipe(
         map(({ at, heardMs }): MixerEvent => ({ type: 'sync', at, heardMs }))
       ),
@@ -205,7 +195,7 @@ const blocks = (
 const session = (
   path: string,
   idleMs: number,
-  commands: Observable<PlayCommand>
+  commands: Observable<Sent>
 ): Observable<never> =>
   defer(() => {
     const device = openDevice(path)

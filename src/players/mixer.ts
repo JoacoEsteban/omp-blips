@@ -17,12 +17,16 @@ const FADE_MS = 6
 /**
  * Simultaneous tones in the mix. The cost of the mix is linear in this: 32
  * voices cost under a tenth of a 10 ms block, and under a fifth of one when
- * every voice carries motion, which recomputes its pan for each frame. It is
- * set well above what a preset needs — three voices on a 250 Hz grid share
- * 128 ms of tone at this cap — because the tone that a full mix refuses is a
- * character that never sounds.
+ * every voice carries motion, which recomputes its pan for each frame. A
+ * sender's cap is set well above what a preset needs — three voices on a
+ * 250 Hz grid share 128 ms of tone at 32 — because the tone that a full mix
+ * refuses is a character that never sounds. The shared cap is three senders at
+ * theirs, so a busy subagent cannot silence the session it serves.
  */
-const MAX_VOICES = 32
+const MAX_SENDER_VOICES = 32
+const MAX_VOICES = 96
+/** Linear up to this level; above it the sum bends toward full scale instead of clipping flat. */
+const KNEE = 0.8
 
 const LEAD_FRAMES = Math.round((LEAD_MS * SAMPLE_RATE) / 1000)
 /** Stereo 32-bit float, the layout the device's WAV header declares. */
@@ -83,6 +87,7 @@ export const renderSource = (
 }
 
 interface Ringing {
+  readonly sender: number
   readonly source: Source
   readonly gain: number
   /**
@@ -112,8 +117,13 @@ export interface MixerState {
 }
 
 export type MixerEvent =
-  | { readonly type: 'play'; readonly tone: Tone; readonly at: number }
-  | { readonly type: 'flush' }
+  | {
+      readonly type: 'play'
+      readonly sender: number
+      readonly tone: Tone
+      readonly at: number
+    }
+  | { readonly type: 'flush'; readonly sender: number }
   | { readonly type: 'tick'; readonly at: number }
   | { readonly type: 'end' }
   /** At wall clock `at` the device was playing the frame `heardMs` into the stream. */
@@ -201,10 +211,19 @@ const mixBlock = (
       left += frame.left * sound.gain * releaseGain
       right += frame.right * sound.gain * releaseGain
     }
-    block.writeFloatLE(Math.max(-1, Math.min(1, left)), i * FRAME_BYTES)
-    block.writeFloatLE(Math.max(-1, Math.min(1, right)), i * FRAME_BYTES + 4)
+    block.writeFloatLE(limited(left), i * FRAME_BYTES)
+    block.writeFloatLE(limited(right), i * FRAME_BYTES + 4)
   }
   return { block, ringing: advance(ringing, frames) }
+}
+
+const limited = (sample: number): number => {
+  const level = Math.abs(sample)
+  if (level <= KNEE) return sample
+  return (
+    Math.sign(sample) *
+    (KNEE + (1 - KNEE) * Math.tanh((level - KNEE) / (1 - KNEE)))
+  )
 }
 
 /**
@@ -217,8 +236,15 @@ const mixBlock = (
  * behind the cursor, as while a sync drains the device, sounds at the next
  * sample written.
  */
-const struck = (state: MixerState, tone: Tone, at: number): MixerState => {
-  if (state.ringing.length >= MAX_VOICES) return { ...state, block: undefined }
+const struck = (
+  state: MixerState,
+  sender: number,
+  tone: Tone,
+  at: number
+): MixerState => {
+  const own = state.ringing.filter((sound) => sound.sender === sender).length
+  if (own >= MAX_SENDER_VOICES || state.ringing.length >= MAX_VOICES)
+    return { ...state, block: undefined }
   const gains = panGains(tone.spatial.at)
   const offset = Math.min(
     0,
@@ -232,6 +258,7 @@ const struck = (state: MixerState, tone: Tone, at: number): MixerState => {
     ringing: [
       ...state.ringing,
       {
+        sender,
         source: { kind: 'mono', samples: voice(tone) },
         gain: tone.volume,
         offset,
@@ -245,10 +272,19 @@ const struck = (state: MixerState, tone: Tone, at: number): MixerState => {
   }
 }
 
+const released = (sound: Ringing): Ringing => {
+  if (sound.release > 0) return sound
+  return { ...sound, release: FADE_FRAMES }
+}
 const releaseAll = (ringing: readonly Ringing[]): readonly Ringing[] =>
+  ringing.map(released)
+const releaseSender = (
+  ringing: readonly Ringing[],
+  sender: number
+): readonly Ringing[] =>
   ringing.map((sound) => {
-    if (sound.release > 0) return sound
-    return { ...sound, release: FADE_FRAMES }
+    if (sound.sender !== sender) return sound
+    return released(sound)
   })
 export const releaseMixer = (state: MixerState): Buffer =>
   mixBlock(releaseAll(state.ringing), FADE_FRAMES, state.cursor, state.openedAt)
@@ -292,10 +328,12 @@ export const mixerStep =
   (idleMs: number) =>
   (state: MixerState, event: MixerEvent): MixerState =>
     match(event)
-      .with({ type: 'play' }, ({ tone, at }) => struck(state, tone, at))
-      .with({ type: 'flush' }, () => ({
+      .with({ type: 'play' }, ({ sender, tone, at }) =>
+        struck(state, sender, tone, at)
+      )
+      .with({ type: 'flush' }, ({ sender }) => ({
         ...state,
-        ringing: releaseAll(state.ringing),
+        ringing: releaseSender(state.ringing, sender),
         block: undefined
       }))
       .with({ type: 'tick' }, ({ at }) => ticked(idleMs, state, at))

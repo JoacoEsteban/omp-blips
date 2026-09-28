@@ -23,8 +23,9 @@ import {
 import { match, P } from 'ts-pattern'
 import { type Intent, interpret, parse, type Settled } from './commands.ts'
 import type { ExtensionStreams, NoticeLevel, Notify } from './events.ts'
-import { type Device, flush, play, playback } from './player.ts'
-import { FfplayLocator, type Located } from './players/locate.ts'
+import { attach } from './bus/client.ts'
+import { LOG_PATH, type Notice } from './bus/protocol.ts'
+import { type Device, flush, gated, play } from './player.ts'
 import type { PresetName } from './presets.ts'
 import {
   deviceOf,
@@ -110,8 +111,8 @@ const deviceFor = ([device, tuning]: readonly [Device, boolean]): Device => ({
   muted: device.muted && !tuning
 })
 
-const announce = (notify: Notify, located: Located): void =>
-  match(located)
+const announce = (notify: Notify, notice: Notice): void =>
+  match(notice)
     .with({ type: 'fetching' }, ({ url }) => {
       notify(`Blips: ffplay not found, downloading ${url}`, 'info')
     })
@@ -119,6 +120,9 @@ const announce = (notify: Notify, located: Located): void =>
       notify(`Blips: ffplay installed at ${path}`, 'info')
     })
     .with({ type: 'ready', fetched: false }, () => undefined)
+    .with({ type: 'failed' }, ({ reason }) => {
+      notify(`Blips: no audio, ${reason}`, 'warning')
+    })
     .exhaustive()
 
 export const start: Start = (io) => {
@@ -206,15 +210,21 @@ export const start: Start = (io) => {
     tuner.active
   ]).pipe(map(deviceFor))
 
-  const ffplay = new FfplayLocator()
-
-  const installs = io.started.pipe(
+  /**
+   * omp calls the factory with no session to validate an install, and waits
+   * for the process to drain. The grid clock and the daemon behind audio would
+   * hold it open forever, so nothing starts before a session does.
+   */
+  const audio = io.started.pipe(
     take(1),
     switchMap(({ notify }) =>
-      ffplay.located.pipe(
-        tap((event) => announce(notify, event)),
-        catchError((error: unknown) => {
-          notify(`Blips: no audio, ${String(error)}`, 'warning')
+      attach(gated(devices, commands)).pipe(
+        tap((notice) => announce(notify, notice)),
+        catchError(() => {
+          notify(
+            `Blips: no audio, the audio daemon did not start, see ${LOG_PATH}`,
+            'warning'
+          )
           return EMPTY
         })
       )
@@ -222,20 +232,8 @@ export const start: Start = (io) => {
     ignoreElements()
   )
 
-  /**
-   * omp calls the factory with no session to validate an install, and waits
-   * for the process to drain. The grid clock and the ffplay lookup behind
-   * audio would hold it open forever, so nothing starts before a session does.
-   */
-  const audio = io.started.pipe(
-    take(1),
-    switchMap(() => playback(devices, commands, ffplay.path)),
-    // A dead device must not take the session down with it.
-    catchError(() => EMPTY)
-  )
-
   // Held from the start: audio subscribes after the settings load at session start, and must not miss them.
-  return merge(session.pipe(ignoreElements()), notices, installs, audio)
+  return merge(session.pipe(ignoreElements()), notices, audio)
     .pipe(takeUntil(io.shutdown))
     .subscribe()
 }

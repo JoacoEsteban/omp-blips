@@ -54,5 +54,5 @@ export const playText = (
       timer(voice.toneMs * TAIL).pipe(ignoreElements())
     )
 
-    return playback(of({ muted: false }), commands, new FfplayLocator().path)
+    return playback(commands, new FfplayLocator().path)
   })

@@ -23,6 +23,9 @@ export const play = (tone: Tone, at: number): PlayCommand => ({
 })
 export const flush = (): PlayCommand => ({ type: 'flush' })
 
+/** A command as the shared device receives it: `sender` scopes a flush to the session that sent it. */
+export type Sent = PlayCommand & { readonly sender: number }
+
 /**
  * A backend is a function from commands to a running device: subscribing opens
  * it, unsubscribing releases it, and it completes once the commands are done
@@ -30,4 +33,4 @@ export const flush = (): PlayCommand => ({ type: 'flush' })
  *
  * The command stream must be hot: a backend may subscribe to it more than once.
  */
-export type Backend = (commands: Observable<PlayCommand>) => Observable<never>
+export type Backend = (commands: Observable<Sent>) => Observable<never>

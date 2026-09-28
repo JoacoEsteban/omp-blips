@@ -1,25 +1,24 @@
 /**
  * Usage: bun run scripts/latency.ts
  *
- * Plays clicks through the extension's own playback path to the default
+ * Plays clicks through the session path, the socket and the daemon, to the default
  * output, records them with the built-in microphone, and prints how long each
  * one took from the moment it was scheduled to the moment the mic heard it.
  * Put the headphones next to the microphone before running.
  */
 import { spawn } from 'node:child_process'
 import {
-  concat,
   ignoreElements,
   lastValueFrom,
   map,
-  of,
   take,
+  takeUntil,
   tap,
   timer
 } from 'rxjs'
 import { isMatching, match, P } from 'ts-pattern'
-import { play, playback, type Tone } from '../src/player.ts'
-import { FfplayLocator } from '../src/players/locate.ts'
+import { attach } from '../src/bus/client.ts'
+import { play, type Tone } from '../src/player.ts'
 
 // The AirPods mic is usually the default input, and opening it drops their
 // output from A2DP to the hands-free profile, which is a different latency.
@@ -207,18 +206,16 @@ const scheduled: number[] = []
 const recording = recorder()
 
 await lastValueFrom(
-  playback(
-    of({ muted: false }),
-    concat(
-      timer(WARMUP_MS, GAP_MS).pipe(
-        take(CLICKS),
-        map(() => performance.now()),
-        tap((at) => scheduled.push(at)),
-        map((at) => play(click, at))
-      ),
-      timer(WINDOW_MS).pipe(ignoreElements())
-    ),
-    new FfplayLocator().path
+  attach(
+    timer(WARMUP_MS, GAP_MS).pipe(
+      take(CLICKS),
+      map(() => performance.now()),
+      tap((at) => scheduled.push(at)),
+      map((at) => play(click, at))
+    )
+  ).pipe(
+    ignoreElements(),
+    takeUntil(timer(WARMUP_MS + CLICKS * GAP_MS + WINDOW_MS))
   ),
   { defaultValue: undefined }
 )

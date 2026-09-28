@@ -481,7 +481,23 @@ melody moves in small steps and sounds more like a song.
 
 ## Playback
 
-The extension uses `ffplay`. The code is in `src/players/ffplay.ts`.
+The sound comes from one daemon process for each version of the extension, shared by every omp
+session on the machine: the main session, its subagents, and other omp instances. The code is in
+`src/bus`.
+
+A session sends its tones to the daemon on a Unix socket, one JSON line for each tone, in
+`$XDG_RUNTIME_DIR` or the temporary directory. The first session that finds no daemon starts one.
+omp is a compiled Bun, and with `BUN_BE_BUN=1` its binary runs the daemon script as Bun does, so no
+other runtime is necessary. The daemon writes its log to `omp-blips-daemon.log` in the temporary
+directory, and it stops 30 s after the last session disconnects.
+
+The daemon synthesizes, mixes, and plays through `ffplay`. The code is in
+`src/players/ffplay.ts`. Its event loop does nothing else, so a busy omp cannot starve the device.
+A tone that omp sends late sounds late, but the audio does not break.
+
+The socket name includes the package version and the newest modification time of the source. A
+session never talks to a daemon that runs different code, and in development each edit gets a new
+daemon.
 
 The extension finds `ffplay` in this order. The code is in `src/players/locate.ts`.
 
@@ -492,12 +508,12 @@ The extension finds `ffplay` in this order. The code is in `src/players/locate.t
    SHA256 checksum, and then writes the binary to `~/Library/Caches/omp-blips` on macOS or to
    `$XDG_CACHE_HOME/omp-blips` (default `~/.cache/omp-blips`) on Linux.
 
-The download is approximately 29 MB and occurs one time. A notice shows when it starts and when it
-ends. If the download fails, a warning shows and the session has no audio. Start `omp` again to try
-again. Builds are available for macOS arm64 and x64 and for Linux x64 and arm64. On other
-platforms, install `ffmpeg`.
+The download is approximately 29 MB and occurs one time. A notice shows in each session when it
+starts and when it ends. If the download fails, a warning shows and there is no audio. The next
+daemon tries again. Builds are available for macOS arm64 and x64 and for Linux x64 and arm64. On
+other platforms, install `ffmpeg`.
 
-The extension starts one `ffplay` process and keeps it. The process reads a WAV stream of
+The daemon starts one `ffplay` process and keeps it. The process reads a WAV stream of
 interleaved 32-bit float stereo at 44.1 kHz, in packets of 10 ms. A mixer writes new audio each
 10 ms and stays 120 ms in front of what the device plays.
 
@@ -514,15 +530,15 @@ full, so the stream is a WAV with a set packet size. The WAV is float because `f
 The lead has a lower limit. `ffplay` gives SDL audio in 46 ms callbacks, and the clock it reports
 does not include two callbacks that are already with the device. With a 40 ms lead, each callback
 waited for audio and the sound crackled. From 80 ms, the device kept time as well as with a full
-second in the queue. In real sessions, the event loop stopped for up to 130 ms, so the lead is
-120 ms.
+second in the queue. When the mixer ran inside omp, its event loop stopped for up to 130 ms, so the
+lead is 120 ms.
 
 Measured from the scheduled moment of a blip to the sound at the built-in microphone, with
 `mise run latency`, a blip reaches AirPods Pro in approximately 313 ms. Before these changes, it
 took 509 ms.
 
-This design has two results. A tone starts without waiting for a new process. Two tones that occur
-together become one mixed sound.
+This design has two results. A tone starts without waiting for a new process. Tones that occur
+together, from one session or from several, become one mixed sound.
 
 A tone does not start at the head of the block that carries it. Each play command holds the moment
 the grid meant it for, and the mixer places its first sample that far into the block: 5 milliseconds
@@ -531,21 +547,26 @@ millisecond block would collapse onto the same instant, and an even grid could h
 100 ticks a second. With it the grid is bounded by the 2 millisecond floor on its period, not by
 the block.
 
-The mixer rings 32 tones at once and refuses the next one until a voice ends. The cost of the mix
-is linear in that number: 32 voices cost under a tenth of a 10 millisecond block, and under a
-fifth of one when every voice carries motion. The presets that ship stay far below it. With all
-three voices reading at once, `haiku` reaches 12 rings and every other preset stays under 6.
+The mixer rings 32 tones at once for each session and 96 in total, and refuses the next one until a
+voice ends. The cost of the mix is linear in that number: 32 voices cost under a tenth of a 10
+millisecond block, and under a fifth of one when every voice carries motion. The presets that ship
+stay far below it. With all three voices reading at once, `haiku` reaches 12 rings and every other
+preset stays under 6.
 
-A pipe does not discard data. If the event loop stops for more than 120 ms, all later blips move
-back in time and stay late. To prevent this delay, the mixer discards the audio of the interval that
-it missed. The tones become older as if the audio had played. As a result, the sound stays
-synchronous with the text, but there is a short gap.
+The mix is linear up to 0.8 of full scale. Above that, it bends toward full scale on a `tanh`
+curve, so tones that pile up from several sessions become louder without clipping.
 
-After 20 s without a blip, the extension stops the process. The next blip starts a new process.
+A pipe does not discard data. If the daemon's event loop stops for more than 120 ms, all later
+blips move back in time and stay late. To prevent this delay, the mixer discards the audio of the
+interval that it missed. The tones become older as if the audio had played. As a result, the sound
+stays synchronous with the text, but there is a short gap.
 
-A flush releases active tones over 6 ms. New tones can start during that release without cutting the old release short.
-When the command stream ends, active tones finish naturally. Mute and shutdown append a short release before the process closes.
-Up to 120 ms of audio is already in the pipe, so silence starts a moment after the stop.
+After 20 s without a blip, the daemon stops `ffplay`. The next blip starts a new `ffplay`.
+
+A flush releases the active tones of the session that sent it over 6 ms, and the tones of other
+sessions ring on. New tones can start during that release without cutting the old release short. A
+session that mutes or disconnects flushes its own tones. Up to 120 ms of audio is already in the
+pipe, so silence starts a moment after the stop.
 
 ## Install
 

@@ -42,6 +42,7 @@ test('motion changes stereo gains across the rendered tone', () => {
   const step = mixerStep(Infinity)
   const started = step(openMixer(0), {
     type: 'play',
+    sender: 0,
     tone: tone({
       at: 0,
       motion: { kind: 'oscillate', clock: 'tone', depth: 1, periodMs: 20 }
@@ -65,6 +66,7 @@ test('voice motion phase follows the shared monotonic timeline', () => {
   const render = (openedAt: number): Buffer => {
     const started = step(openMixer(openedAt), {
       type: 'play',
+      sender: 0,
       tone: tone({
         at: 0,
         motion: {
@@ -101,12 +103,14 @@ test('flush releases old tones without cutting a newly played tone', () => {
   const step = mixerStep(Infinity)
   const first = step(openMixer(0), {
     type: 'play',
+    sender: 0,
     tone: tone({ at: -1 }),
     at: 0
   })
-  const flushed = step(first, { type: 'flush' })
+  const flushed = step(first, { type: 'flush', sender: 0 })
   const added = step(flushed, {
     type: 'play',
+    sender: 0,
     tone: { ...tone({ at: 1 }), toneMs: 400 },
     at: 1
   })
@@ -128,6 +132,7 @@ test('end drains a natural source instead of cutting it', () => {
   const step = mixerStep(Infinity)
   const started = step(openMixer(0), {
     type: 'play',
+    sender: 0,
     tone: tone({ at: 0 }),
     at: 0
   })
@@ -144,7 +149,12 @@ test('a tone starts at the sample it asked for, not at the head of the block', (
   const step = mixerStep(Infinity)
   // One block covering 10 ms of new audio, with a tone due 5 ms into it.
   const opened = step(openMixer(0), { type: 'tick', at: 0 })
-  const struck = step(opened, { type: 'play', tone: tone({ at: 0 }), at: 5 })
+  const struck = step(opened, {
+    type: 'play',
+    sender: 0,
+    tone: tone({ at: 0 }),
+    at: 5
+  })
   const block = step(struck, { type: 'tick', at: 10 }).block
   if (block === undefined) throw new Error('expected a rendered block')
 
@@ -162,8 +172,18 @@ test('a tone starts at the sample it asked for, not at the head of the block', (
 test('two tones inside one tick keep the distance between them', () => {
   const step = mixerStep(Infinity)
   const opened = step(openMixer(0), { type: 'tick', at: 0 })
-  const first = step(opened, { type: 'play', tone: tone({ at: 0 }), at: 2 })
-  const second = step(first, { type: 'play', tone: tone({ at: 0 }), at: 7 })
+  const first = step(opened, {
+    type: 'play',
+    sender: 0,
+    tone: tone({ at: 0 }),
+    at: 2
+  })
+  const second = step(first, {
+    type: 'play',
+    sender: 0,
+    tone: tone({ at: 0 }),
+    at: 7
+  })
 
   expect(second.ringing.map(({ offset }) => offset)).toEqual([-88, -309])
 })
@@ -173,11 +193,55 @@ test('a sync that finds the device behind writes nothing until it catches up', (
   // 300 ms and the 120 ms lead are written before the device plays frame 0.
   const written = step(openMixer(0), { type: 'tick', at: 300 })
   const synced = step(written, { type: 'sync', at: 300, heardMs: 0 })
-  const struck = step(synced, { type: 'play', tone: tone({ at: 0 }), at: 400 })
+  const struck = step(synced, {
+    type: 'play',
+    sender: 0,
+    tone: tone({ at: 0 }),
+    at: 400
+  })
 
   expect(step(struck, { type: 'tick', at: 310 }).block).toBeUndefined()
   expect(struck.ringing.map(({ offset }) => offset)).toEqual([0])
   // Heard frame plus lead passes the 420 ms already written at 600 ms.
   expect(step(struck, { type: 'tick', at: 590 }).block).toBeUndefined()
   expect(step(struck, { type: 'tick', at: 610 }).block).toBeDefined()
+})
+
+test('a flush releases only the tones of the sender that sent it', () => {
+  const step = mixerStep(Infinity)
+  const both = [0, 1].reduce(
+    (state, sender) =>
+      step(state, { type: 'play', sender, tone: tone({ at: 0 }), at: 0 }),
+    openMixer(0)
+  )
+  const flushed = step(both, { type: 'flush', sender: 1 })
+
+  expect(
+    flushed.ringing
+      .filter(({ release }) => release > 0)
+      .map(({ sender }) => sender)
+  ).toEqual([1])
+})
+
+test('overlapping loud tones bend under full scale instead of clipping flat', () => {
+  const step = mixerStep(Infinity)
+  // Eight tones at full volume sum far past 1 at their peak.
+  const loud = Array.from({ length: 8 }, (_, sender) => sender).reduce(
+    (state, sender) =>
+      step(state, {
+        type: 'play',
+        sender,
+        tone: { ...tone({ at: 0 }), volume: 1 },
+        at: 0
+      }),
+    openMixer(0)
+  )
+  const block = step(loud, { type: 'tick', at: 0 }).block
+  if (block === undefined) throw new Error('expected a rendered block')
+
+  const levels = Array.from({ length: block.length / 4 }, (_, index) =>
+    Math.abs(block.readFloatLE(index * 4))
+  )
+  expect(Math.max(...levels)).toBeLessThan(1)
+  expect(Math.max(...levels)).toBeGreaterThan(0.8)
 })

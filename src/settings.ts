@@ -51,7 +51,7 @@ const colorSchema = z.discriminatedUnion('kind', [
 ])
 const panSchema = z.number().finite().min(-1).max(1)
 
-const motionSchema = z.strictObject({
+export const motionSchema = z.strictObject({
   kind: z.literal('oscillate'),
   clock: z.enum(['tone', 'voice']),
   depth: z.number().finite().min(0).max(1),
@@ -76,6 +76,18 @@ const spatialSchema = z.strictObject({
   motion: motionSchema.optional()
 })
 
+export const materialSchema = z.enum([
+  'wood',
+  'stone',
+  'ceramic',
+  'glass',
+  'reed',
+  'brass',
+  'vocal'
+])
+
+export const touchSchema = z.enum(['soft', 'normal', 'firm'])
+
 const voiceSchema = z
   .object({
     enabled: z.boolean(),
@@ -88,17 +100,9 @@ const voiceSchema = z
     hold: z.number().min(0).max(1),
     glide: z.number(),
     volume: z.number().min(0).max(1),
-    material: z.enum([
-      'wood',
-      'stone',
-      'ceramic',
-      'glass',
-      'reed',
-      'brass',
-      'vocal'
-    ]),
+    material: materialSchema,
     color: colorSchema,
-    touch: z.enum(['soft', 'normal', 'firm']),
+    touch: touchSchema,
     baseFrequency: z.number().positive(),
     reading: readingSchema,
     pitch: pitchSchema,
