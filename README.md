@@ -134,3 +134,7 @@ the extension reloads it. You hear the change on the next blip.
 | `mise run lint`      | Examines the source files with ESLint.    |
 | `mise run audition`  | Plays the same text through every preset. |
 | `mise run unlink`    | Removes the link.                         |
+| `mise run release`   | Tags the version on `main` for npm.       |
+
+To release, bump `version` in `package.json` and push `main`. Then run `mise run release`. The tag
+starts the `Release` workflow, which runs the checks and publishes the package to npm.

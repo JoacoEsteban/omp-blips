@@ -8,6 +8,10 @@
   ],
   "type": "module",
   "description": "omp extension that plays a pitched blip while the assistant streams text",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JoacoEsteban/omp-blips.git"
+  },
   "omp": {
     "extensions": [
       "./src/index.ts"
