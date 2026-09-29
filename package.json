@@ -20,7 +20,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "eslint src scripts",
-    "lint:fix": "eslint src scripts --fix"
+    "lint:fix": "eslint src scripts --fix",
+    "postversion": "jj bookmark set main -r v$npm_package_version && jj git push -b main --tag v$npm_package_version"
   },
   "dependencies": {
     "esfuzz": "^0.3.1",

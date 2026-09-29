@@ -36,16 +36,3 @@ echo "linked -> ~/.omp/agent/extensions/omp-blips"
 [tasks.unlink]
 description = "Remove the omp extension symlink"
 run = "rm -f ~/.omp/agent/extensions/omp-blips"
-
-[tasks.release]
-description = "Tag the version on main and push the tag, which publishes it to npm"
-run = """
-#!/usr/bin/env bash
-set -euo pipefail
-commit=$(jj log -r main --no-graph -T commit_id)
-remote=$(jj log -r main@origin --no-graph -T commit_id)
-if [ "$commit" != "$remote" ]; then echo "main is not pushed to origin" >&2; exit 1; fi
-version=$(jj file show -r main package.json | jq -r .version)
-git tag -a "v$version" -m "$version" "$commit"
-git push origin "v$version"
-"""
