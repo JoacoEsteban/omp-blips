@@ -8,6 +8,15 @@
   ],
   "type": "module",
   "description": "omp extension that plays a pitched blip while the assistant streams text",
+  "keywords": [
+    "omp",
+    "oh-my-pi",
+    "omp-package",
+    "omp-extension",
+    "audio",
+    "sound",
+    "synth"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/JoacoEsteban/omp-blips.git"
