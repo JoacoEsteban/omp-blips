@@ -17,7 +17,7 @@ import {
 process.env['PI_CODING_AGENT_DIR'] = mkdtempSync(join(tmpdir(), 'omp-blips-'))
 
 const samples: Samples = {
-  of: (kind): Sample => ({ text: `${kind} sample`, problem: '' })
+  of: (kind): Sample => ({ text: `${kind} sample` })
 }
 
 const opened = (): Tuning => tuningOf(samples, 'default')

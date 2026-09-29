@@ -112,10 +112,7 @@ interface Clock {
 }
 
 const clockFor = (tuning: Tuning): Clock => ({
-  paused:
-    tuning.paused ||
-    tuning.sample.text.length === 0 ||
-    tuning.sample.problem.length > 0,
+  paused: tuning.paused || tuning.sample.text.length === 0,
   charsPerSecond: 1000 / delayFor(tuning.speedIndex)
 })
 
@@ -129,7 +126,7 @@ const rewound = (tuning: Tuning): Tuning => ({
 })
 
 const resampled = (tuning: Tuning, samples: Samples): Tuning =>
-  rewound({ ...tuning, sample: samples.of(tuning.kind, tuning.sample) })
+  rewound({ ...tuning, sample: samples.of(tuning.kind) })
 
 const moved = (tuning: Tuning, delta: number): Tuning => {
   const presetIndex = cycle(tuning.presetIndex, delta, PRESET_NAMES.length)
@@ -367,10 +364,6 @@ export const view = (
 ): readonly string[] => {
   const voice = voiceOf(tuning)
   const grid = tuning.config.tickHz / voice.divisor
-  const problem = match(tuning.sample.problem)
-    .with('', () => [])
-    .otherwise((text) => [theme.fg('error', clip(text, width))])
-
   return [
     theme.bold(theme.fg('accent', clip('blips — pick a preset', width))),
     '',
@@ -393,7 +386,6 @@ export const view = (
       `${readingLabel(voice.reading)} -> ${pitchLabel(voice.pitch)}  colour ${colorLabel(voice.color)}`
     ),
     sliderRow(tuning, theme),
-    ...problem,
     theme.fg('borderMuted', '─'.repeat(Math.max(1, width))),
     ...previewRows(tuning, theme, width),
     theme.fg(

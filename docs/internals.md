@@ -157,9 +157,8 @@ speed of an answer. A `·` marks the preset that the configuration file names to
 The picker auditions one voice at a time, and each voice reads its own kind of text. The text
 voice reads prose. The thinking voice reads short lowercase sentences, because reasoning has
 shorter sentences than answer text, and a structural reading finds its sentence reset more often
-there. The tool voice reads JavaScript from `esfuzz`, which is parser-fuzzing input and not
-representative application code. The sample is raw code, not a tool-call payload, and the picker
-never runs it.
+there. The sample is generated JavaScript, not representative application code. It is raw code,
+not a tool-call payload, and the picker never runs it.
 
 A voice that is off in the configuration file is silent in the picker too. The picker says `off`
 next to that voice. Start it with `/blips text`, `/blips thinking` or `/blips tool`.
@@ -211,7 +210,7 @@ same pipeline. A change of one preset is therefore easy to hear, and what you he
 is what the session gives you.
 
 The sample generators are loaded on demand. A session that never opens the picker never imports
-`lorem-ipsum` or `esfuzz`.
+`lorem-ipsum` or the JavaScript generator.
 
 ### Reloading the source
 
