@@ -137,3 +137,7 @@ the extension reloads it. You hear the change on the next blip.
 
 To release, run `npm version`. It pushes the new tag, and the tag starts the `Release` workflow.
 The workflow runs the checks and publishes the package to npm.
+
+## License
+
+[MIT](LICENSE)
